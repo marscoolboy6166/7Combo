@@ -7,10 +7,19 @@ import { getSelectedCity } from "@/lib/get-city";
 import { APP_NAME, APP_TAGLINE } from "@/lib/constants";
 import "./globals.css";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+function resolveSiteUrl(): URL {
+  const raw = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  const fallback = "http://localhost:3000";
+  try {
+    return new URL(raw ? raw : fallback);
+  } catch {
+    // An invalid or empty env value must never break the build.
+    return new URL(fallback);
+  }
+}
 
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
+  metadataBase: resolveSiteUrl(),
   title: {
     default: `${APP_NAME} — ${APP_TAGLINE}`,
     template: `%s · ${APP_NAME}`,
