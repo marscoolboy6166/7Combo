@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { CATEGORIES, CITIES, categoryLabel } from "@/lib/constants";
+import { CATEGORIES, CITIES, categoryLabel, cityLabel } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import ProductImageUploader from "@/components/product-image-uploader";
 import BulkCatalogPanel from "@/components/bulk-catalog-panel";
@@ -396,47 +396,49 @@ export default function AdminPage() {
                   startEdit(p);
                 }
               }}
-              className="group flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:border-emerald-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="group flex cursor-pointer flex-col rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:border-emerald-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
-              <ProductImageUploader
-                slug={p.slug}
-                currentImage={p.image_url}
-                emoji={p.emoji}
-                compact
-                onChanged={load}
-              />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="truncate font-semibold text-slate-800">{p.name_en}</p>
-                  <span
-                    className={cn(
-                      "mt-1 h-2 w-2 shrink-0 rounded-full",
-                      p.is_active ? "bg-emerald-500" : "bg-slate-300",
-                    )}
-                    title={p.is_active ? "Active — visible in catalog" : "Hidden — not in catalog"}
-                  />
-                </div>
-                {p.name_th && <p className="truncate text-xs text-slate-400">{p.name_th}</p>}
-                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
-                    {categoryLabel(p.category)}
-                  </span>
-                  <span className="text-sm font-bold text-slate-700">฿{p.price_thb}</span>
-                </div>
-                <p className="mt-1 truncate text-[11px] text-slate-400">
-                  {p.cities.includes("all") ? "Nationwide" : p.cities.join(", ")}
-                </p>
+              <div className="flex justify-end">
+                <span
+                  className={cn(
+                    "h-2.5 w-2.5 rounded-full",
+                    p.is_active ? "bg-emerald-500" : "bg-slate-300",
+                  )}
+                  title={p.is_active ? "Active — visible in catalog" : "Hidden — not in catalog"}
+                />
               </div>
+
+              <div className="self-start">
+                <ProductImageUploader
+                  slug={p.slug}
+                  currentImage={p.image_url}
+                  emoji={p.emoji}
+                  compact
+                  onChanged={load}
+                />
+              </div>
+              <span className="mt-2 self-start rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                {categoryLabel(p.category)}
+              </span>
+
+              <p className="mt-2 font-semibold leading-snug text-slate-800">{p.name_en}</p>
+
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   startEdit(p);
                 }}
-                className="shrink-0 self-end rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                className="mt-2 shrink-0 self-end rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"
               >
                 Edit
               </button>
+
+              <div className="mt-auto pt-2 text-[11px] text-slate-500">
+                <span className="text-sm font-bold text-slate-700">฿{p.price_thb}</span>
+                <span className="mx-1 text-slate-300">·</span>
+                {p.cities.includes("all") ? "Nationwide" : p.cities.map(cityLabel).join(", ")}
+              </div>
             </div>
           ))}
           {filtered.length === 0 && (
