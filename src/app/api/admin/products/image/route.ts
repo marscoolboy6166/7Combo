@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/admin-auth";
 import { createClient } from "@/lib/supabase/server";
-import { isSupabaseConfigured } from "@/lib/supabase/config";
 
 const MAX_BYTES = 4 * 1024 * 1024; // 4 MB
 const ALLOWED_TYPES: Record<string, string> = {
@@ -33,28 +33,11 @@ async function resolveProduct(
  * public URL in products.image_url. Rejects non-admins (403).
  */
 export async function POST(request: Request) {
-  if (!isSupabaseConfigured()) {
-    return NextResponse.json(
-      { message: "Connect Supabase (see README.md) to upload images." },
-      { status: 503 },
-    );
+  const gate = await requireAdmin();
+  if (gate.error || !gate.supabase) {
+    return NextResponse.json({ message: gate.error }, { status: gate.status });
   }
-
-  const supabase = await createClient();
-
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) {
-    return NextResponse.json({ message: "Sign in required." }, { status: 401 });
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("is_admin")
-    .eq("id", userData.user.id)
-    .maybeSingle();
-  if (!profile?.is_admin) {
-    return NextResponse.json({ message: "Admin access required." }, { status: 403 });
-  }
+  const supabase = gate.supabase;
 
   let form: FormData;
   try {
@@ -144,23 +127,11 @@ export async function POST(request: Request) {
  * safety — admins can clean it up in the Supabase dashboard).
  */
 export async function DELETE(request: Request) {
-  if (!isSupabaseConfigured()) {
-    return NextResponse.json({ message: "Supabase not configured." }, { status: 503 });
+  const gate = await requireAdmin();
+  if (gate.error || !gate.supabase) {
+    return NextResponse.json({ message: gate.error }, { status: gate.status });
   }
-
-  const supabase = await createClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) {
-    return NextResponse.json({ message: "Sign in required." }, { status: 401 });
-  }
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("is_admin")
-    .eq("id", userData.user.id)
-    .maybeSingle();
-  if (!profile?.is_admin) {
-    return NextResponse.json({ message: "Admin access required." }, { status: 403 });
-  }
+  const supabase = gate.supabase;
 
   const slug = new URL(request.url).searchParams.get("slug")?.trim();
   if (!slug) {

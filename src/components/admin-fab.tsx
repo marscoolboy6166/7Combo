@@ -44,7 +44,7 @@ export default function AdminFab() {
       className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-slate-700"
       title="Admin panel"
     >
-      🛠️ <span className="hidden sm:inline">Admin</span>
+      <span className="hidden sm:inline">Admin</span>
     </Link>
   );
 }

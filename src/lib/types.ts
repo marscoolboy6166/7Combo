@@ -42,6 +42,8 @@ export interface Combo {
   avg_rating: number;
   rating_count: number;
   created_at: string;
+  /** True when an admin has hidden this combo from the public site. */
+  archived?: boolean;
   items?: ComboItem[];
   profiles?: Pick<
     Profile,

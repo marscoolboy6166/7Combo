@@ -85,6 +85,7 @@ function mapComboRow(row: {
   avg_rating: number;
   rating_count: number;
   created_at: string;
+  archived?: boolean | null;
   profiles: ProfilesRel;
   combo_items: Array<{
     combo_id: string;
@@ -108,6 +109,7 @@ function mapComboRow(row: {
     avg_rating: Number(row.avg_rating),
     rating_count: row.rating_count,
     created_at: row.created_at,
+    archived: row.archived === true,
     items: (row.combo_items ?? []).map(
       (ci): ComboItem => ({
         combo_id: ci.combo_id,
@@ -122,19 +124,38 @@ function mapComboRow(row: {
 
 const COMBO_SELECT = `
   id, slug, title, description, steps, photo_url, author_id, author_name,
-  avg_rating, rating_count, created_at,
+  avg_rating, rating_count, created_at, archived,
   profiles!combos_author_id_fkey ( id, display_name, username, avatar_url ),
   combo_items ( combo_id, product_id, quantity, notes, products ( * ) )
 ` as const;
 
+/** Fallback select for databases that haven't run the moderation migration yet. */
+const COMBO_SELECT_NO_ARCHIVED = COMBO_SELECT.replace("created_at, archived,", "created_at,");
+
+function isMissingArchivedColumn(error: { code?: string; message?: string } | null): boolean {
+  return error?.code === "42703" || /column .archived. does not exist/i.test(error?.message ?? "");
+}
+
 export async function fetchCombos(): Promise<Combo[]> {
   try {
     const supabase = await createClient();
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("combos")
       .select(COMBO_SELECT)
+      .eq("archived", false)
       .order("created_at", { ascending: false })
       .limit(200);
+
+    // Migration not run yet → degrade to the old select instead of failing.
+    if (error && isMissingArchivedColumn(error)) {
+      const retry = await supabase
+        .from("combos")
+        .select(COMBO_SELECT_NO_ARCHIVED)
+        .order("created_at", { ascending: false })
+        .limit(200);
+      data = retry.data as unknown as typeof data;
+      error = retry.error;
+    }
 
     if (error) throw error;
     return (data ?? []).map(mapComboRow);

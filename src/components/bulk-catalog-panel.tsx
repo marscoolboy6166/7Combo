@@ -93,7 +93,7 @@ export default function BulkCatalogPanel({ onImported }: { onImported: () => voi
   return (
     <section className="mt-10 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 className="text-lg font-bold tracking-tight">📊 Bulk catalog import / export</h2>
+        <h2 className="text-lg font-bold tracking-tight">Bulk catalog import / export</h2>
         <p className="text-xs text-slate-400">
           Maintain the catalog in a spreadsheet, then push it here.
         </p>
@@ -105,14 +105,14 @@ export default function BulkCatalogPanel({ onImported }: { onImported: () => voi
           href="/api/admin/products/bulk"
           className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 transition hover:bg-slate-50"
         >
-          ⬇️ Export catalog as CSV
+          Export catalog as CSV
         </a>
         <button
           type="button"
           onClick={downloadTemplate}
           className="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 transition hover:bg-slate-50"
         >
-          📄 Download blank template
+          Download blank template
         </button>
         <span className="text-xs text-slate-400">
           Export → edit in Excel/Sheets → import back. Best workflow.
@@ -190,7 +190,7 @@ export default function BulkCatalogPanel({ onImported }: { onImported: () => voi
       {/* Success summary */}
       {result && (
         <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          <p className="font-semibold">✅ Imported {result.upserted} products</p>
+          <p className="font-semibold">Imported {result.upserted} products</p>
           <p className="mt-0.5 text-xs">
             {result.newCount ?? 0} new · {result.updateCount ?? 0} updated
             {result.hidden ? ` · ${result.hidden} hidden (not in file)` : ""}
@@ -230,7 +230,7 @@ export default function BulkCatalogPanel({ onImported }: { onImported: () => voi
                           className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-700"
                           title={r.messages.join(" · ")}
                         >
-                          ⚠ {r.messages[0]}
+                          {r.messages[0]}
                         </span>
                       ) : r.exists ? (
                         <span className="rounded-full bg-sky-100 px-2 py-0.5 text-sky-700">update</span>

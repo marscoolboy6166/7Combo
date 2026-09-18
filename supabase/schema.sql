@@ -360,3 +360,35 @@ exception
   when insufficient_privilege then
     raise notice 'Storage policies skipped (insufficient privilege). Create them in Dashboard > Storage > Policies instead.';
 end $$;
+
+-- ============================================================
+-- Combo moderation (admins): archived column + admin policies
+-- Safe to re-run. Also runs as part of a full schema run.
+-- ============================================================
+
+alter table public.combos add column if not exists archived boolean not null default false;
+create index if not exists combos_archived_idx on public.combos (archived);
+
+-- Public visitors see only live combos; admins also see archived ones
+-- (needed for the moderation list and unarchive).
+drop policy if exists "Public read combos" on public.combos;
+create policy "Public read combos"
+  on public.combos for select
+  using (archived = false or public.is_admin());
+
+drop policy if exists "Admins update any combos" on public.combos;
+create policy "Admins update any combos"
+  on public.combos for update
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists "Admins delete any combos" on public.combos;
+create policy "Admins delete any combos"
+  on public.combos for delete
+  using (public.is_admin());
+
+-- Column-level grants: authors may edit their own content fields and may
+-- archive their own combo; only admins can unarchive (they are the only
+-- ones who can see archived rows to act on them).
+revoke update on public.combos from anon, authenticated;
+grant update (title, description, steps, photo_url, archived) on public.combos to authenticated;

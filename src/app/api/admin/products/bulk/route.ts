@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { requireAdmin } from "@/lib/admin-auth";
 import {
   BULK_HEADERS,
   mapHeaders,
@@ -9,35 +8,13 @@ import {
   serializeCsv,
 } from "@/lib/csv";
 
-async function requireAdmin() {
-  if (!isSupabaseConfigured()) {
-    return {
-      supabase: null,
-      error: "Connect Supabase (see README.md) to use the admin panel.",
-      status: 503 as const,
-    };
-  }
-
-  const supabase = await createClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return { supabase, error: "Sign in required.", status: 401 as const };
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("is_admin")
-    .eq("id", userData.user.id)
-    .maybeSingle();
-
-  if (!profile?.is_admin) {
-    return { supabase, error: "Admin access required.", status: 403 as const };
-  }
-  return { supabase, error: null, status: 200 as const };
-}
-
 /** GET → download the whole catalog as CSV (Excel/Sheets friendly). */
 export async function GET() {
-  const { supabase, error, status } = await requireAdmin();
-  if (error || !supabase) return NextResponse.json({ message: error }, { status });
+  const gate = await requireAdmin();
+  if (gate.error || !gate.supabase) {
+    return NextResponse.json({ message: gate.error }, { status: gate.status });
+  }
+  const supabase = gate.supabase;
 
   const { data, error: dbError } = await supabase
     .from("products")
@@ -81,8 +58,11 @@ export async function GET() {
  *  - "replace" → additionally hide every existing product not in the file
  */
 export async function POST(request: Request) {
-  const { supabase, error, status } = await requireAdmin();
-  if (error || !supabase) return NextResponse.json({ message: error }, { status });
+  const gate = await requireAdmin();
+  if (gate.error || !gate.supabase) {
+    return NextResponse.json({ message: gate.error }, { status: gate.status });
+  }
+  const supabase = gate.supabase;
 
   let body: { csv?: unknown; mode?: unknown; importMode?: unknown };
   try {
