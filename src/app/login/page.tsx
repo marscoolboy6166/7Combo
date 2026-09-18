@@ -1,14 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured, NOT_CONFIGURED_MESSAGE } from "@/lib/supabase/config";
 import { APP_NAME } from "@/lib/constants";
 
-export default function LoginPage() {
+function LoginInner() {
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Error passed back by the auth callback (real OAuth failure reason).
+  const callbackError = searchParams.get("error");
+  const callbackReason = searchParams.get("reason");
+  const shownError =
+    callbackError === "auth"
+      ? callbackReason
+        ? `Sign-in failed: ${callbackReason}`
+        : "Sign-in failed. Please try again."
+      : callbackError === "setup"
+        ? NOT_CONFIGURED_MESSAGE
+        : null;
 
   async function signInWithGoogle() {
     if (!isSupabaseConfigured()) {
@@ -22,6 +36,9 @@ export default function LoginPage() {
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
+        // Always show Google's account chooser so you can switch or add
+        // accounts (needed for testing multiple users on localhost).
+        queryParams: { prompt: "select_account" },
       },
     });
     if (error) {
@@ -44,9 +61,9 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {error && (
+        {(error ?? shownError) && (
           <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
+            {error ?? shownError}
           </p>
         )}
 
@@ -86,5 +103,13 @@ export default function LoginPage() {
         </p>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginInner />
+    </Suspense>
   );
 }

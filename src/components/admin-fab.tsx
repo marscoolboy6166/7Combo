@@ -8,7 +8,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/config";
 
 /**
  * Floating admin shortcut pinned to the bottom-right corner, out of the way
- * of every other button. Renders only for signed-in admins.
+ * of every other button. Renders for staff: admins and moderators.
  */
 export default function AdminFab() {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -26,10 +26,15 @@ export default function AdminFab() {
       }
       const { data: profile } = await supabase
         .from("profiles")
-        .select("is_admin")
+        .select("is_admin, role")
         .eq("id", data.user.id)
         .maybeSingle();
-      if (alive) setIsAdmin(Boolean(profile?.is_admin));
+      if (alive)
+        setIsAdmin(
+          profile?.role === "admin" ||
+            profile?.role === "moderator" ||
+            Boolean(profile?.is_admin),
+        );
     });
     return () => {
       alive = false;

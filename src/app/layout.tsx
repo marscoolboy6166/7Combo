@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Header from "@/components/header";
 import AdminFab from "@/components/admin-fab";
+import BanWatcher from "@/components/ban-watcher";
 import SetupNotice from "@/components/setup-notice";
 import { CityProvider } from "@/lib/city-context";
 import { getSelectedCity } from "@/lib/get-city";
@@ -45,6 +46,7 @@ export default async function RootLayout({
       <body className="flex min-h-screen flex-col">
         <CityProvider city={city}>
           <SetupNotice />
+          <BanWatcher />
           <Header />
           <AdminFab />
           <div className="flex-1">{children}</div>

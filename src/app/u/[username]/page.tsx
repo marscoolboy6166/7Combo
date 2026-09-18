@@ -3,7 +3,9 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import ComboCard from "@/components/combo-card";
 import EmptyState from "@/components/empty-state";
-import { getProfileByUsername, getCombosByAuthor } from "@/lib/data";
+import MyBanStatus from "@/components/my-ban-status";
+import ProfileAdminActions from "@/components/profile-admin-actions";
+import { getProfileByUsername, getCombosByAuthor, getUserStats } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +33,8 @@ export default async function ProfilePage({
   if (!profile) notFound();
 
   const combos = await getCombosByAuthor(profile.id);
-  const ratingsReceived = combos.reduce((sum, c) => sum + c.rating_count, 0);
+  const stats = await getUserStats(profile.id);
+  const ratingsReceived = stats.ratings_received;
   const weightedSum = combos.reduce(
     (sum, c) => sum + Number(c.avg_rating) * c.rating_count,
     0,
@@ -68,9 +71,19 @@ export default async function ProfilePage({
             <h1 className="truncate text-2xl font-extrabold tracking-tight">
               {profile.display_name}
             </h1>
-            {profile.is_admin && (
+            {profile.role === "admin" && (
               <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">
                 ADMIN
+              </span>
+            )}
+            {profile.role === "moderator" && (
+              <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-bold text-indigo-700">
+                MODERATOR
+              </span>
+            )}
+            {profile.is_test && (
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">
+                TEST ACCOUNT
               </span>
             )}
           </div>
@@ -80,10 +93,21 @@ export default async function ProfilePage({
         </div>
       </section>
 
-      <section className="mt-4 grid grid-cols-3 gap-3">
+      {/* Admin-only: quick ban/timeout right on the profile (never on
+          admin/owner profiles — they cannot be banned) */}
+      <ProfileAdminActions userId={profile.id} targetRole={profile.role} />
+
+      {/* If the VIEWER is banned, their notice + one-appeal form lives here. */}
+      <MyBanStatus />
+
+      <section className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-sm">
-          <p className="text-2xl font-extrabold text-slate-900">{combos.length}</p>
+          <p className="text-2xl font-extrabold text-slate-900">{stats.combos_posted}</p>
           <p className="text-xs font-medium text-slate-500">Combos posted</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-sm">
+          <p className="text-2xl font-extrabold text-slate-900">{stats.ratings_given}</p>
+          <p className="text-xs font-medium text-slate-500">Ratings given</p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-sm">
           <p className="text-2xl font-extrabold text-slate-900">{ratingsReceived}</p>

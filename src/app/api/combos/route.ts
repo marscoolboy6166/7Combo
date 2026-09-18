@@ -40,6 +40,28 @@ export async function POST(request: Request) {
     );
   }
 
+  // Ban enforcement (posting scope) — mirrors the RLS check so the user
+  // gets a clear, actionable message instead of a raw database error.
+  const { data: banRow } = await supabase
+    .from("profiles")
+    .select("ban_scope, ban_until, ban_reason")
+    .eq("id", userData.user.id)
+    .maybeSingle();
+  const bannedFromPosting =
+    Boolean(banRow?.ban_scope) &&
+    (banRow!.ban_scope === "posting" || banRow!.ban_scope === "both") &&
+    (!banRow?.ban_until || new Date(banRow.ban_until).getTime() > Date.now());
+  if (bannedFromPosting) {
+    return NextResponse.json(
+      {
+        message:
+          banRow?.ban_reason ||
+          "You are restricted from posting combos. Visit your profile for details or to submit your appeal.",
+      },
+      { status: 403 },
+    );
+  }
+
   let body: ComboInput;
   try {
     body = await request.json();

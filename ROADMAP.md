@@ -1,6 +1,6 @@
 # 7Combo — Roadmap & Growth Ideas
 
-_Last updated: after the admin hub + combo moderation release (commit 3f6d372, live)._
+_Last updated: after the user system release — /users directory, profile stats, bans/timeouts + one-appeal system (SQL pending user run)._
 
 Ask me "what's the roadmap?" anytime and I'll re-read this file.
 
@@ -33,7 +33,7 @@ Ask me "what's the roadmap?" anytime and I'll re-read this file.
 
 1. ~~Deploy + share cards~~ — DONE
 2. ~~Admin hub + combo moderation~~ — DONE
-3. **Users & bans section** (member list, search, ban controls) — moderation must precede promotion
+3. ~~Users & bans section~~ — DONE (member directory /users, admin Users page, dedicated per-user ban page: permaban vs timeout, posting/rating/both scopes, visible reason, unban, one-appeal system with deny/uphold)
 4. **Anti-spam basics** (rate limits on posting/rating)
 5. **Privacy/terms page**
 6. **Seed 30–40 realistic combos** so the site isn't empty for the first wave

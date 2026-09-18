@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireStaff } from "@/lib/admin-auth";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -21,7 +21,7 @@ function isMissingColumn(error: { code?: string; message?: string } | null): boo
  * RLS lets admins see archived rows; this endpoint just reads them.
  */
 export async function GET() {
-  const gate = await requireAdmin();
+  const gate = await requireStaff();
   if (gate.error || !gate.supabase) {
     return NextResponse.json({ message: gate.error }, { status: gate.status });
   }
@@ -53,7 +53,7 @@ export async function GET() {
  * are untouched.
  */
 export async function PATCH(request: Request) {
-  const gate = await requireAdmin();
+  const gate = await requireStaff();
   if (gate.error || !gate.supabase) {
     return NextResponse.json({ message: gate.error }, { status: gate.status });
   }
@@ -145,7 +145,7 @@ export async function PATCH(request: Request) {
  * ON DELETE CASCADE at the database level.
  */
 export async function DELETE(request: Request) {
-  const gate = await requireAdmin();
+  const gate = await requireStaff();
   if (gate.error || !gate.supabase) {
     return NextResponse.json({ message: gate.error }, { status: gate.status });
   }

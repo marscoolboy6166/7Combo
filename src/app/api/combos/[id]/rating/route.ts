@@ -64,6 +64,27 @@ export async function POST(
     );
   }
 
+  // Ban enforcement (rating scope) — mirrors the RLS check for a clear error.
+  const { data: banRow } = await supabase
+    .from("profiles")
+    .select("ban_scope, ban_until, ban_reason")
+    .eq("id", userData.user.id)
+    .maybeSingle();
+  const bannedFromRating =
+    Boolean(banRow?.ban_scope) &&
+    (banRow!.ban_scope === "rating" || banRow!.ban_scope === "both") &&
+    (!banRow?.ban_until || new Date(banRow.ban_until).getTime() > Date.now());
+  if (bannedFromRating) {
+    return NextResponse.json(
+      {
+        message:
+          banRow?.ban_reason ||
+          "You are restricted from rating combos. Visit your profile for details or to submit your appeal.",
+      },
+      { status: 403 },
+    );
+  }
+
   let stars: unknown;
   try {
     ({ stars } = await request.json());

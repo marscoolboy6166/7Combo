@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured, NOT_CONFIGURED_MESSAGE } from "@/lib/supabase/config";
 import { baht, cn } from "@/lib/utils";
 import type { Product } from "@/lib/types";
+import BannedNotice from "@/components/banned-notice";
 
 interface PickerProduct extends Product {
   demo?: boolean;
@@ -30,6 +31,10 @@ export default function SubmitPage() {
   const [steps, setSteps] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const [banState, setBanState] = useState<{
+    banned: boolean;
+    scope: string | null;
+  } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -48,6 +53,12 @@ export default function SubmitPage() {
       ? supabase.auth.getUser().then(({ data }) => setSignedIn(Boolean(data.user)))
       : Promise.resolve()
     ).finally(() => setSignedIn((s) => (s === null ? false : s)));
+
+    // Posting-scope bans replace the form with a notice + appeal form.
+    fetch("/api/me/ban")
+      .then((r) => r.json())
+      .then((b) => setBanState({ banned: Boolean(b.banned), scope: b.scope ?? null }))
+      .catch(() => setBanState(null));
   }, []);
 
   const filtered = useMemo(() => {
@@ -144,6 +155,18 @@ export default function SubmitPage() {
           >
             Continue with Google
           </Link>
+        </div>
+      </main>
+    );
+  }
+
+  // Banned from posting → notice instead of the form.
+  if (banState?.banned && (banState.scope === "posting" || banState.scope === "both")) {
+    return (
+      <main className="mx-auto w-full max-w-3xl px-4 py-8">
+        <h1 className="text-2xl font-bold tracking-tight">Post a combo</h1>
+        <div className="mt-6">
+          <BannedNotice />
         </div>
       </main>
     );

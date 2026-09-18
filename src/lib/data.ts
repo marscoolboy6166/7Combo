@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
-import type { Combo, ComboItem, Product, Profile } from "@/lib/types";
+import type { Combo, ComboItem, Product, Profile, UserStats, UserRole } from "@/lib/types";
 import { DEMO_COMBOS, DEMO_PRODUCTS } from "@/lib/demo-data";
 
 /**
@@ -202,7 +202,8 @@ export async function getComboBySlug(slug: string): Promise<Combo | null> {
 /* ------------------------------------------------------------------ */
 /* Profiles                                                            */
 
-const PROFILE_SELECT = "id, display_name, username, avatar_url, is_admin, created_at" as const;
+const PROFILE_SELECT =
+  "id, display_name, username, avatar_url, is_admin, role, is_test, created_at" as const;
 
 /** Look up a public profile by its username handle (case-insensitive). */
 export async function getProfileByUsername(username: string): Promise<Profile | null> {
@@ -242,6 +243,105 @@ export async function getProfileById(id: string): Promise<Profile | null> {
 export async function getCombosByAuthor(authorId: string): Promise<Combo[]> {
   const combos = await fetchCombos();
   return combos.filter((c) => c.author_id === authorId);
+}
+
+/* ------------------------------------------------------------------ */
+/* User directory + per-user stats                                     */
+
+export interface DirectoryUser {
+  id: string;
+  display_name: string;
+  username: string | null;
+  avatar_url: string | null;
+  is_admin: boolean;
+  role: UserRole;
+  is_test: boolean;
+  created_at: string;
+  combos_posted: number;
+  ratings_given: number;
+}
+
+/**
+ * Browse/search members of the community. Empty `q` returns the latest
+ * members; non-empty `q` matches display name or username (case-
+ * insensitive). Ban columns are not publicly readable.
+ */
+export async function searchProfiles(q = ""): Promise<DirectoryUser[]> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, display_name, username, avatar_url, is_admin, role, is_test, created_at")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error) throw error;
+
+    const combos = await fetchCombos();
+    const postedBy = new Map<string, number>();
+    for (const c of combos) {
+      if (c.author_id) postedBy.set(c.author_id, (postedBy.get(c.author_id) ?? 0) + 1);
+    }
+
+    const ratings = await listRatingsForStats();
+    const givenBy = new Map<string, number>();
+    for (const r of ratings) {
+      givenBy.set(r.user_id, (givenBy.get(r.user_id) ?? 0) + 1);
+    }
+
+    let out = (data ?? []).map((p) => ({
+      ...p,
+      combos_posted: postedBy.get(p.id) ?? 0,
+      ratings_given: givenBy.get(p.id) ?? 0,
+    }));
+
+    const needle = q.trim().toLowerCase();
+    if (needle) {
+      out = out.filter(
+        (p) =>
+          p.display_name.toLowerCase().includes(needle) ||
+          (p.username ?? "").toLowerCase().includes(needle),
+      );
+    }
+    return out;
+  } catch (error) {
+    console.error("[data] searchProfiles failed:", error);
+    return [];
+  }
+}
+
+/** All ratings rows (author id only) — feeds directory stats. */
+async function listRatingsForStats(): Promise<Array<{ user_id: string }>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("ratings").select("user_id").limit(10000);
+  if (error) return [];
+  return data ?? [];
+}
+
+/** Ratings given + received for one user (public profile stats). */
+export async function getUserStats(userId: string): Promise<UserStats> {
+  try {
+    const supabase = await createClient();
+    const { count: given } = await supabase
+      .from("ratings")
+      .select("user_id", { count: "exact", head: true })
+      .eq("user_id", userId);
+
+    const { count: received } = await supabase
+      .from("ratings")
+      .select("user_id, combos!inner(author_id)", { count: "exact", head: true })
+      .eq("combos.author_id", userId);
+
+    const combos = await getCombosByAuthor(userId);
+
+    return {
+      combos_posted: combos.length,
+      ratings_given: given ?? 0,
+      ratings_received: received ?? 0,
+    };
+  } catch (error) {
+    console.error("[data] getUserStats failed:", error);
+    return { combos_posted: 0, ratings_given: 0, ratings_received: 0 };
+  }
 }
 
 /* ------------------------------------------------------------------ */

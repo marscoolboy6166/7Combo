@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import BannedNotice from "@/components/banned-notice";
 
 export default function RatingWidget({
   comboId,
@@ -22,6 +23,8 @@ export default function RatingWidget({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  const [banned, setBanned] = useState(false);
+
   useEffect(() => {
     fetch(`/api/combos/${comboId}/rating`)
       .then((res) => res.json())
@@ -30,6 +33,11 @@ export default function RatingWidget({
         if (typeof data.stars === "number") setMyRating(data.stars);
       })
       .catch(() => setSignedIn(false));
+    // Rating-scope bans replace the star input with a notice + appeal form.
+    fetch("/api/me/ban")
+      .then((r) => r.json())
+      .then((b) => setBanned(Boolean(b.banned && (b.scope === "rating" || b.scope === "both"))))
+      .catch(() => setBanned(false));
   }, [comboId]);
 
   async function rate(stars: number) {
@@ -59,6 +67,10 @@ export default function RatingWidget({
   }
 
   const display = hover ?? myRating ?? 0;
+
+  if (signedIn && banned) {
+    return <BannedNotice />;
+  }
 
   if (signedIn === false) {
     return (

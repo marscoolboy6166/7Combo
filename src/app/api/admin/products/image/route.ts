@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireStaff } from "@/lib/admin-auth";
 import { createClient } from "@/lib/supabase/server";
 
 const MAX_BYTES = 4 * 1024 * 1024; // 4 MB
@@ -33,7 +33,7 @@ async function resolveProduct(
  * public URL in products.image_url. Rejects non-admins (403).
  */
 export async function POST(request: Request) {
-  const gate = await requireAdmin();
+  const gate = await requireStaff();
   if (gate.error || !gate.supabase) {
     return NextResponse.json({ message: gate.error }, { status: gate.status });
   }
@@ -127,7 +127,7 @@ export async function POST(request: Request) {
  * safety — admins can clean it up in the Supabase dashboard).
  */
 export async function DELETE(request: Request) {
-  const gate = await requireAdmin();
+  const gate = await requireStaff();
   if (gate.error || !gate.supabase) {
     return NextResponse.json({ message: gate.error }, { status: gate.status });
   }

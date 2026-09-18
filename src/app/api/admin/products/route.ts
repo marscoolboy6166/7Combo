@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireStaff } from "@/lib/admin-auth";
 
 export async function GET() {
-  const gate = await requireAdmin();
+  const gate = await requireStaff();
   if (gate.error || !gate.supabase) {
     return NextResponse.json({ message: gate.error }, { status: gate.status });
   }
@@ -18,7 +18,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const gate = await requireAdmin();
+  const gate = await requireStaff();
   if (gate.error || !gate.supabase) {
     return NextResponse.json({ message: gate.error }, { status: gate.status });
   }

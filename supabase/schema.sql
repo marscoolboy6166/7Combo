@@ -392,3 +392,501 @@ create policy "Admins delete any combos"
 -- ones who can see archived rows to act on them).
 revoke update on public.combos from anon, authenticated;
 grant update (title, description, steps, photo_url, archived) on public.combos to authenticated;
+
+-- ============================================================
+-- User system: bans/timeouts + one-appeal system
+-- Safe to re-run. Also runs as part of a full schema run.
+-- ============================================================
+
+alter table public.profiles add column if not exists ban_scope text check (ban_scope in ('posting','rating','both'));
+alter table public.profiles add column if not exists ban_until timestamptz;
+alter table public.profiles add column if not exists ban_reason text;
+alter table public.profiles add column if not exists ban_at timestamptz;
+
+alter table public.profiles add column if not exists appeal_status text not null default 'none' check (appeal_status in ('none','pending','denied','upheld'));
+alter table public.profiles add column if not exists appeal_text text;
+alter table public.profiles add column if not exists appeal_at timestamptz;
+
+-- True when the caller is currently banned from a given scope
+-- ('posting', 'rating', or 'both'). Permanent ban = ban_until is null.
+create or replace function public.is_banned(p_scope text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.profiles
+    where id = auth.uid()
+      and ban_scope is not null
+      and ban_scope in (p_scope, 'both')
+      and (ban_until is null or ban_until > now())
+  );
+$$;
+
+-- DB-level ban enforcement: a banned user's writes fail even if a future
+-- bug bypasses the API checks.
+drop policy if exists "Signed-in users create combos" on public.combos;
+create policy "Signed-in users create combos"
+  on public.combos for insert
+  with check (
+    auth.uid() = author_id
+    and not public.is_banned('posting')
+  );
+
+drop policy if exists "Users insert own ratings" on public.ratings;
+create policy "Users insert own ratings"
+  on public.ratings for insert
+  with check (
+    auth.uid() = user_id
+    and not public.is_banned('rating')
+  );
+
+drop policy if exists "Users update own ratings" on public.ratings;
+create policy "Users update own ratings"
+  on public.ratings for update
+  using (auth.uid() = user_id and not public.is_banned('rating'))
+  with check (auth.uid() = user_id and not public.is_banned('rating'));
+
+-- A user's own ban/appeal state, readable without exposing ban columns to
+-- broad SELECT (only the caller's own row is returned).
+create or replace function public.my_ban_state()
+returns json
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select json_build_object(
+    'banned', ban_scope is not null and (ban_until is null or ban_until > now()),
+    'scope', case when ban_scope is not null and (ban_until is null or ban_until > now()) then ban_scope end,
+    'until', case when ban_scope is not null and (ban_until is null or ban_until > now()) then ban_until end,
+    'reason', case when ban_scope is not null and (ban_until is null or ban_until > now()) then ban_reason end,
+    'appeal_status', appeal_status,
+    'appeal_text', appeal_text,
+    'appeal_at', appeal_at,
+    'can_appeal', ban_scope is not null and (ban_until is null or ban_until > now()) and appeal_status = 'none'
+  )
+  from public.profiles
+  where id = auth.uid();
+$$;
+
+-- Public profile visibility: everything as today, minus the ban columns.
+revoke select on public.profiles from anon, authenticated;
+grant select (id, display_name, username, avatar_url, is_admin, created_at) on public.profiles to anon, authenticated;
+
+-- Column-level updates stay locked to the profile-editable trio; ban and
+-- appeal columns are written exclusively by admins (RLS + grants below).
+revoke update on public.profiles from anon, authenticated;
+grant update (display_name, username, avatar_url) on public.profiles to authenticated;
+
+-- Ban management (RLS-level enforcement so even a crafted API call fails)
+drop policy if exists "Admins update profiles" on public.profiles;
+create policy "Admins update profiles"
+  on public.profiles for update
+  using (public.is_admin())
+  with check (public.is_admin());
+
+-- ============================================================
+-- Appeals: exactly one per user. Enforced in the database.
+-- ============================================================
+
+create or replace function public.submit_appeal(p_text text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.profiles
+     set appeal_status = 'pending',
+         appeal_text = left(p_text, 2000),
+         appeal_at = now()
+   where id = auth.uid()
+     and ban_scope is not null
+     and (ban_until is null or ban_until > now())
+     and appeal_status in ('none', 'denied');
+  return found;
+end;
+$$;
+
+-- Users can NEVER directly update appeal columns (no grant exists) —
+-- appeals go exclusively through submit_appeal(), which enforces the
+-- one-appeal rule server-side. Admins write ban/appeal columns through
+-- the admin API (owner role), also unreachable by users directly.
+
+revoke execute on function public.submit_appeal(text) from anon, authenticated;
+grant execute on function public.submit_appeal(text) to authenticated;
+
+revoke execute on function public.my_ban_state() from anon;
+revoke execute on function public.my_ban_state() from anon;
+grant execute on function public.my_ban_state() to authenticated;
+
+-- ============================================================
+-- Admin functions for ban management.
+-- Direct table writes on ban columns are NOT granted to any user role
+-- (only the function owner), so all admin moderation flows through
+-- these security-definer functions. The app verifies is_admin() before
+-- calling them; the functions re-verify as a second lock.
+-- ============================================================
+
+create or replace function public.admin_set_ban(
+  p_target uuid,
+  p_scope text,
+  p_until timestamptz,   -- null = permanent
+  p_reason text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+  if p_target = auth.uid() then
+    raise exception 'You cannot ban yourself';
+  end if;
+  if exists (select 1 from public.profiles where id = p_target and role = 'owner') then
+    raise exception 'The owner cannot be banned';
+  end if;
+  if exists (select 1 from public.profiles where id = p_target and is_admin)
+     and not public.is_owner() then
+    raise exception 'Only the owner can restrict an admin';
+  end if;
+  if p_scope not in ('posting', 'rating', 'both') then
+    raise exception 'Invalid scope';
+  end if;
+
+  update public.profiles
+     set ban_scope = p_scope,
+         ban_until = p_until,
+         ban_reason = nullif(p_reason, ''),
+         ban_at = now(),
+         appeal_status = 'none',
+         appeal_text = null,
+         appeal_at = null
+   where id = p_target;
+  return found;
+end;
+$$;
+
+create or replace function public.admin_lift_ban(p_target uuid, p_appeal text default null)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+  if exists (select 1 from public.profiles where id = p_target and role = 'owner') then
+    raise exception 'The owner cannot be banned';
+  end if;
+  if exists (select 1 from public.profiles where id = p_target and is_admin)
+     and not public.is_owner() then
+    raise exception 'Only the owner can lift an admin restriction';
+  end if;
+  if p_appeal is not null and p_appeal not in ('upheld') then
+    raise exception 'Invalid appeal value';
+  end if;
+
+  update public.profiles
+     set ban_scope = null,
+         ban_until = null,
+         ban_reason = null,
+         ban_at = null,
+         appeal_status = case when p_appeal = 'upheld' then 'upheld' else appeal_status end,
+         appeal_at = case when p_appeal = 'upheld' then now() else appeal_at end
+   where id = p_target;
+  return found;
+end;
+$$;
+
+create or replace function public.admin_deny_appeal(p_target uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+  if exists (select 1 from public.profiles where id = p_target and is_admin)
+     and not public.is_owner() then
+    raise exception 'Only the owner can decide an admin appeal';
+  end if;
+  update public.profiles
+     set appeal_status = 'denied', appeal_at = now()
+   where id = p_target and appeal_status = 'pending';
+  return found;
+end;
+$$;
+
+-- Full profiles list for the admin user page (ban/appeal columns included).
+create or replace function public.admin_list_users()
+returns table (
+  id uuid,
+  display_name text,
+  username text,
+  avatar_url text,
+  is_admin boolean,
+  created_at timestamptz,
+  ban_scope text,
+  ban_until timestamptz,
+  ban_reason text,
+  ban_at timestamptz,
+  appeal_status text,
+  appeal_text text,
+  appeal_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select id, display_name, username, avatar_url, is_admin, created_at,
+         ban_scope, ban_until, ban_reason, ban_at,
+         appeal_status, appeal_text, appeal_at
+  from public.profiles
+  order by created_at desc
+  limit 500;
+$$;
+
+revoke execute on function public.admin_set_ban(uuid, text, timestamptz, text) from anon, authenticated;
+revoke execute on function public.admin_lift_ban(uuid, text) from anon, authenticated;
+revoke execute on function public.admin_deny_appeal(uuid) from anon, authenticated;
+revoke execute on function public.admin_list_users() from anon, authenticated;
+grant execute on function public.admin_set_ban(uuid, text, timestamptz, text) to authenticated;
+grant execute on function public.admin_lift_ban(uuid, text) to authenticated;
+grant execute on function public.admin_deny_appeal(uuid) to authenticated;
+grant execute on function public.admin_list_users() to authenticated;
+
+-- UPDATE on ban/appeal columns is deliberately NOT granted to any user
+-- role: admins write those columns only through the functions above,
+-- which verify is_admin() internally as a second lock.
+
+-- ============================================================
+-- Roles: user / moderator / admin / owner + official test-account flag.
+-- is_admin stays as the enforced admin bit and is kept in sync with
+-- role in ('admin','owner') by the trigger below, so all existing RLS
+-- keeps working. There is exactly one owner, assignable ONLY by direct
+-- SQL (the app has no code path that grants or removes it).
+-- ============================================================
+
+alter table public.profiles add column if not exists role text not null default 'user';
+alter table public.profiles add column if not exists is_test boolean not null default false;
+
+-- Hard domain constraint on roles (blocks arbitrary values even via SQL).
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'profiles_role_check') then
+    alter table public.profiles
+      add constraint profiles_role_check
+      check (role in ('user', 'moderator', 'admin', 'owner'));
+  end if;
+end $$;
+
+-- At most one owner, enforced at the index level — even direct SQL
+-- cannot create a second owner row.
+create unique index if not exists profiles_single_owner
+  on public.profiles (role)
+  where role = 'owner';
+
+-- One-time data migration: existing admins get role='admin'.
+-- (role = 'user' guard keeps this safe on re-runs — never touches owner.)
+update public.profiles set role = 'admin' where is_admin = true and role = 'user';
+
+-- Keep is_admin consistent with role on every write.
+create or replace function public.sync_is_admin()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  new.is_admin := (new.role in ('admin', 'owner'));
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_sync_is_admin on public.profiles;
+create trigger profiles_sync_is_admin
+  before insert or update on public.profiles
+  for each row execute function public.sync_is_admin();
+
+-- Owner protection: the owner row can never be demoted/role-changed, and
+-- no second owner can ever be created (INSERT included).
+create or replace function public.owner_role_guard()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op = 'UPDATE' and old.role = 'owner' and new.role <> 'owner' then
+    raise exception 'The owner role cannot be changed or demoted';
+  end if;
+  if new.role = 'owner' and coalesce(old.role, '') <> 'owner' then
+    if exists (select 1 from public.profiles where role = 'owner' and id <> new.id) then
+      raise exception 'There can only be one owner';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_owner_guard on public.profiles;
+create trigger profiles_owner_guard
+  before insert or update on public.profiles
+  for each row execute function public.owner_role_guard();
+
+-- One-time data migration: existing admins get role='admin'.
+-- (role = 'user' guard keeps this safe on re-runs — never touches owner.)
+update public.profiles set role = 'admin' where is_admin = true and role = 'user';
+
+-- >>> OWNER ASSIGNMENT — run once, by hand, in the SQL Editor: <<<
+-- update public.profiles set role = 'owner' where id = '<your-user-uuid>';
+
+-- Staff = owner, admin or moderator (catalog + combo moderation powers).
+create or replace function public.is_staff()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid()
+      and (role in ('owner', 'admin', 'moderator') or is_admin = true)
+  );
+$$;
+
+-- Owner check (the one role the app can never grant).
+create or replace function public.is_owner()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role = 'owner'
+  );
+$$;
+
+-- Product image uploads: staff (was admin-only).
+drop policy if exists "Admins upload product images" on storage.objects;
+create policy "Staff upload product images"
+  on storage.objects for insert
+  with check (bucket_id = 'product-images' and public.is_staff());
+
+drop policy if exists "Admins manage product images" on storage.objects;
+drop policy if exists "Admins delete product images" on storage.objects;
+create policy "Staff manage product images"
+  on storage.objects for update
+  using (bucket_id = 'product-images' and public.is_staff());
+create policy "Staff delete product images"
+  on storage.objects for delete
+  using (bucket_id = 'product-images' and public.is_staff());
+
+-- Public profiles expose the role + test badge (read-only).
+revoke select on public.profiles from anon, authenticated;
+grant select (id, display_name, username, avatar_url, is_admin, role, is_test, created_at) on public.profiles to anon, authenticated;
+
+-- Role / test-flag management: admin-only, through functions (users have
+-- no direct UPDATE grant on these columns — self-promotion stays closed).
+create or replace function public.admin_set_role(p_target uuid, p_role text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+  if p_role = 'owner' then
+    raise exception 'The owner role is assigned directly in the database and cannot be granted through the app';
+  end if;
+  if p_role not in ('user', 'moderator', 'admin') then
+    raise exception 'Invalid role';
+  end if;
+  if p_target = auth.uid() then
+    raise exception 'You cannot change your own role';
+  end if;
+  if exists (select 1 from public.profiles where id = p_target and role = 'owner') then
+    raise exception 'The owner role cannot be changed';
+  end if;
+  update public.profiles set role = p_role where id = p_target;
+  return found;
+end;
+$$;
+
+create or replace function public.admin_set_test(p_target uuid, p_is_test boolean)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+  update public.profiles set is_test = p_is_test where id = p_target;
+  return found;
+end;
+$$;
+
+-- Extended member list: now includes role + is_test.
+-- (drop first: the return shape changed — Postgres cannot
+-- change a function's OUT row type via CREATE OR REPLACE)
+drop function if exists public.admin_list_users();
+create or replace function public.admin_list_users()
+returns table (
+  id uuid,
+  display_name text,
+  username text,
+  avatar_url text,
+  is_admin boolean,
+  role text,
+  is_test boolean,
+  created_at timestamptz,
+  ban_scope text,
+  ban_until timestamptz,
+  ban_reason text,
+  ban_at timestamptz,
+  appeal_status text,
+  appeal_text text,
+  appeal_at timestamptz
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required';
+  end if;
+  return query
+  select p.id, p.display_name, p.username, p.avatar_url, p.is_admin, p.role, p.is_test,
+         p.created_at, p.ban_scope, p.ban_until, p.ban_reason, p.ban_at,
+         p.appeal_status, p.appeal_text, p.appeal_at
+  from public.profiles p
+  order by p.created_at desc
+  limit 500;
+end;
+$$;
+
+revoke execute on function public.admin_set_role(uuid, text) from anon, authenticated;
+revoke execute on function public.admin_set_test(uuid, boolean) from anon, authenticated;
+grant execute on function public.admin_set_role(uuid, text) to authenticated;
+grant execute on function public.admin_set_test(uuid, boolean) to authenticated;

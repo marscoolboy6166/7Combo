@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireStaff } from "@/lib/admin-auth";
 import {
   BULK_HEADERS,
   mapHeaders,
@@ -10,7 +10,7 @@ import {
 
 /** GET → download the whole catalog as CSV (Excel/Sheets friendly). */
 export async function GET() {
-  const gate = await requireAdmin();
+  const gate = await requireStaff();
   if (gate.error || !gate.supabase) {
     return NextResponse.json({ message: gate.error }, { status: gate.status });
   }
@@ -58,7 +58,7 @@ export async function GET() {
  *  - "replace" → additionally hide every existing product not in the file
  */
 export async function POST(request: Request) {
-  const gate = await requireAdmin();
+  const gate = await requireStaff();
   if (gate.error || !gate.supabase) {
     return NextResponse.json({ message: gate.error }, { status: gate.status });
   }

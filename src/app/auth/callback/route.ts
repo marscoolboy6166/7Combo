@@ -17,7 +17,12 @@ export async function GET(request: NextRequest) {
     if (!error) {
       return NextResponse.redirect(`${origin}${next}`);
     }
+    // Surface the real cause on the login screen instead of swallowing it:
+    // stale PKCE cookies, used codes, and provider errors all look
+    // identical to the user otherwise.
+    const reason = encodeURIComponent(error.message.slice(0, 200));
+    return NextResponse.redirect(`${origin}/login?error=auth&reason=${reason}`);
   }
 
-  return NextResponse.redirect(`${origin}/login?error=auth`);
+  return NextResponse.redirect(`${origin}/login?error=auth&reason=${encodeURIComponent("No authorization code was returned.")}`);
 }
