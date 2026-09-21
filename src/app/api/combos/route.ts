@@ -19,6 +19,12 @@ interface ComboInput {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+interface RateLimitEvent {
+  reason?: string;
+  event_type?: string;
+  until?: string | null;
+}
+
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json(
@@ -93,6 +99,20 @@ export async function POST(request: Request) {
     );
   }
 
+  // Anti-spam: the posting-limit trigger cancels attempts past the
+  // quota (3/hour, warnings first, then auto-timeout) and logs a
+  // moderation event. Read that event back for a friendly 429.
+  const { data: limitRow } = await supabase
+    .rpc("my_last_rate_limit_event", { p_action: "post" })
+    .maybeSingle();
+  const limitEvent = limitRow as RateLimitEvent | null;
+  if (limitEvent) {
+    return NextResponse.json(
+      { message: limitEvent.reason ?? "You are posting too quickly — please slow down." },
+      { status: 429 },
+    );
+  }
+
   // Resolve the author's display name for denormalized display
   const { data: profile } = await supabase
     .from("profiles")
@@ -143,6 +163,18 @@ export async function POST(request: Request) {
     .single();
 
   if (comboError || !combo) {
+    // A trigger-cancelled insert (rate limit raced in between the check
+    // and the insert) surfaces as a PostgREST error — answer 429.
+    const { data: racedRow } = await supabase
+      .rpc("my_last_rate_limit_event", { p_action: "post" })
+      .maybeSingle();
+    const raced = racedRow as RateLimitEvent | null;
+    if (raced) {
+      return NextResponse.json(
+        { message: raced.reason ?? "You are posting too quickly — please slow down." },
+        { status: 429 },
+      );
+    }
     return NextResponse.json(
       { message: comboError?.message ?? "Could not create combo." },
       { status: 500 },

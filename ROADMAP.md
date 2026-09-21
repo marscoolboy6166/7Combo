@@ -1,6 +1,6 @@
 # 7Combo — Roadmap & Growth Ideas
 
-_Last updated: after shipping the full user system (roles + owner hierarchy, bans/timeouts, appeals, popup confirmations) to production._
+_Last updated: anti-spam auto-moderation BUILT (warnings + automatic timeouts, admin popup + Auto-mod overview card) — activate by running supabase/anti-spam.sql, then deploy._
 
 Ask me "what's the roadmap?" anytime and I'll re-read this file.
 
@@ -9,7 +9,7 @@ Ask me "what's the roadmap?" anytime and I'll re-read this file.
 - **Site:** https://7-combo.vercel.app · repo `marscoolboy6166/7Combo` · push = auto-deploy (~90 s)
 - **Works:** catalog (74 products, photos, CSV import/export), combos + star ratings, per-combo OG share cards, Google sign-in (account chooser every time), profiles + avatars, `/users` member directory with search, admin hub (`/admin`: Products, Combos, Users), roles (user / moderator / admin / **owner**), test-account flags, bans/timeouts with posting/rating scopes + visible reason, one-appeal system, ban-watcher popup, in-app confirmation modals everywhere
 - **Security (verified):** owner is immutable & assignable only via SQL; owner can restrict admins, admins can't ban admins/owner/self; every admin API re-checks roles; anonymous attack suite passes
-- **Gaps:** no anti-spam, thin content (8 combos), English-only
+- **Gaps:** thin content (8 combos), English-only
 
 ## Growth strategy (reach)
 
@@ -34,19 +34,20 @@ Ask me "what's the roadmap?" anytime and I'll re-read this file.
 1. ~~Deploy + share cards~~ — DONE
 2. ~~Admin hub + combo moderation~~ — DONE
 3. ~~Users & bans (roles, owner hierarchy, appeals)~~ — DONE and deployed
-4. **Anti-spam basics** (rate limits on posting/rating)
-5. **Site necessities pack** — contact-me link in the footer, Q&A/FAQ section, bug-report form (trust builders before promotion)
+4. ~~**Anti-spam basics**~~ — BUILT: 3 posts/hour with 2 warnings then automatic timeouts (1h → 24h), re-rate burst limit (5 per combo / 10 min), staff roles only are exempt (is_test is a badge — test accounts are NOT exempt), all enforced by database triggers; admin popup + Auto-mod card. Enforcement verified live in the DB; UI shipped with the deploy.
+5. **Site necessities pack** — contact-me link in the footer, Q&A/FAQ section, bug-report form (trust builders before promotion) — ON HOLD until the site has its own dedicated email
 6. **Comments on combos** — flat or threaded, with moderation hooks (hide/delete for staff) and ban enforcement (posting scope)
-7. **More sign-in options** — email magic links / password as a fallback to Google
-8. **User settings expansion** — notification prefs, default city, profile-visibility toggles
-9. **Cosmetics** — theme system: colors, decorations, seasonal banners (the "Site cosmetics" admin tile)
-10. **User search upgrade** — a small dedicated find-members section beyond the directory sort
-11. **Privacy/terms page**
-12. **Seed 30–40 realistic combos** so the site isn't empty for the first wave
-13. **Try-list loop** → **remixes** → **collections** → **challenges/leaderboards**
-14. **New-this-week feed** (later: catalog automation program)
-15. **Thai language** localization
-16. Start promotion (FB groups, Reddit, Shorts) once 4–12 are in place
+7. **Language detector / friendly-content filter** — gently nudge or auto-flag combo text written in unsupported languages (pairs with Thai localization), plus basic profanity/spam text filtering. Roadmap only for now.
+8. **More sign-in options** — email magic links / password as a fallback to Google
+9. **User settings expansion** — notification prefs, default city, profile-visibility toggles
+10. **Cosmetics** — theme system: colors, decorations, seasonal banners (the "Site cosmetics" admin tile)
+11. **User search upgrade** — a small dedicated find-members section beyond the directory sort
+12. **Privacy/terms page**
+13. **Seed 30–40 realistic combos** so the site isn't empty for the first wave
+14. **Try-list loop** → **remixes** → **collections** → **challenges/leaderboards**
+15. **New-this-week feed** (later: catalog automation program)
+16. **Thai language** localization
+17. Start promotion (FB groups, Reddit, Shorts) once 4–13 are in place
 
 ## Optional shinies
 

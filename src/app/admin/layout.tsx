@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import ModerationPopup from "@/components/moderation-popup";
 
 /**
  * Client shell for the admin area: renders the gate state (checking /
@@ -112,7 +113,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   // will 403 and the page shows the refusal — no data leaks.
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-8">
+    <>
+      <div className="mx-auto w-full max-w-6xl px-4 py-8">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-xl font-bold tracking-tight">Admin</h1>
         <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
@@ -151,6 +153,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </nav>
 
       <div className="mt-6">{children}</div>
-    </div>
+      </div>
+
+      {/* Recent automatic anti-spam actions (warnings / auto-timeouts) */}
+      <ModerationPopup />
+    </>
   );
 }

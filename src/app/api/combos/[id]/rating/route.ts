@@ -4,6 +4,12 @@ import { isSupabaseConfigured } from "@/lib/supabase/config";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+interface RateLimitEvent {
+  reason?: string;
+  event_type?: string;
+  until?: string | null;
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -96,6 +102,20 @@ export async function POST(
     return NextResponse.json({ message: "Rating must be 1-5." }, { status: 400 });
   }
 
+  // Anti-spam: the re-rating trigger cancels bursts on a single combo
+  // (5+ actions in 10 minutes; warnings first, then auto-timeout) and
+  // logs a moderation event. Read it back for a friendly 429.
+  const { data: limitRow } = await supabase
+    .rpc("my_last_rate_limit_event", { p_action: "rate", p_context: id })
+    .maybeSingle();
+  const limitEvent = limitRow as RateLimitEvent | null;
+  if (limitEvent) {
+    return NextResponse.json(
+      { message: limitEvent.reason ?? "You are rating too quickly — please slow down." },
+      { status: 429 },
+    );
+  }
+
   const { error } = await supabase
     .from("ratings")
     .upsert(
@@ -109,7 +129,31 @@ export async function POST(
     );
 
   if (error) {
+    const { data: racedRow } = await supabase
+      .rpc("my_last_rate_limit_event", { p_action: "rate", p_context: id })
+      .maybeSingle();
+    const raced = racedRow as RateLimitEvent | null;
+    if (raced) {
+      return NextResponse.json(
+        { message: raced.reason ?? "You are rating too quickly — please slow down." },
+        { status: 429 },
+      );
+    }
     return NextResponse.json({ message: error.message }, { status: 500 });
+  }
+
+  // A BEFORE trigger that returns NULL cancels the write WITHOUT an
+  // error, so a fresh rate-limit hit looks like success here. Re-check
+  // after the write and answer 429 if this attempt was just blocked.
+  const { data: postRow } = await supabase
+    .rpc("my_last_rate_limit_event", { p_action: "rate", p_context: id })
+    .maybeSingle();
+  const postEvent = postRow as RateLimitEvent | null;
+  if (postEvent) {
+    return NextResponse.json(
+      { message: postEvent.reason ?? "You are rating too quickly — please slow down." },
+      { status: 429 },
+    );
   }
 
   const { data: combo } = await supabase
