@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import RatingWidget from "@/components/rating-widget";
+import CommentSection from "@/components/comment-section";
 import IngredientChip from "@/components/ingredient-chip";
 import Stars from "@/components/stars";
 import { getComboBySlug, getCombos } from "@/lib/data";
@@ -136,6 +137,8 @@ export default async function ComboDetailPage({
           />
         </div>
       </section>
+
+      <CommentSection comboId={combo.id} />
 
       {related.length > 0 && (
         <section className="mt-10">

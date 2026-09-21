@@ -36,7 +36,7 @@ Ask me "what's the roadmap?" anytime and I'll re-read this file.
 3. ~~Users & bans (roles, owner hierarchy, appeals)~~ — DONE and deployed
 4. ~~**Anti-spam basics**~~ — BUILT: 3 posts/hour with 2 warnings then automatic timeouts (1h → 24h), re-rate burst limit (5 per combo / 10 min), staff roles only are exempt (is_test is a badge — test accounts are NOT exempt), all enforced by database triggers; admin popup + Auto-mod card. Enforcement verified live in the DB; UI shipped with the deploy.
 5. **Site necessities pack** — contact-me link in the footer, Q&A/FAQ section, bug-report form (trust builders before promotion) — ON HOLD until the site has its own dedicated email
-6. **Comments on combos** — flat or threaded, with moderation hooks (hide/delete for staff) and ban enforcement (posting scope)
+6. ~~**Comments on combos**~~ — BUILT: flat comments on every combo page, posting-scope ban enforcement + comment flood limits wired into the anti-spam triggers, staff hide/unhide/delete inline. **Activate by running `supabase/comments.sql`** (one paste; requires anti-spam SQL already run — it is).
 7. **Language detector / friendly-content filter** — gently nudge or auto-flag combo text written in unsupported languages (pairs with Thai localization), plus basic profanity/spam text filtering. Roadmap only for now.
 8. **More sign-in options** — email magic links / password as a fallback to Google
 9. **User settings expansion** — notification prefs, default city, profile-visibility toggles
