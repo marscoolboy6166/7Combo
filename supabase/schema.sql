@@ -3,6 +3,12 @@
 -- Run this in the Supabase SQL Editor (or `supabase db push`).
 -- Safe to re-run: every statement uses IF NOT EXISTS / OR REPLACE
 -- / ON CONFLICT guards where the syntax allows it.
+--
+-- Companion migrations (run after this file, in order):
+--   1. supabase/admin-ban-hierarchy.sql  — owner/admin ban permissions
+--   2. supabase/anti-spam.sql            — warnings + auto-timeouts
+--   3. supabase/comments.sql             — combo comments
+--   4. supabase/filter-appeals.sql       — filter appeals + phrase whitelist
 -- ============================================================
 
 -- ---------- profiles: mirrors auth.users, auto-created on signup ----------
@@ -49,16 +55,26 @@ set search_path = public
 as $$
 declare
   base_username text;
+  meta_name text;
+  email_prefix text;
 begin
-  -- Derive a username from the Google display name (letters/digits only);
-  -- fall back to a short id-based handle if the name has no alphanumerics.
+  -- OAuth providers (Google) put the profile name in user metadata; email
+  -- magic-link sign-ups have none, so fall back to the email prefix
+  -- ("jane@x.com" -> "Jane") and finally the generic default.
+  meta_name := coalesce(
+    new.raw_user_meta_data ->> 'full_name',
+    new.raw_user_meta_data ->> 'name'
+  );
+  email_prefix := left(
+    coalesce(nullif(split_part(new.email, '@', 1), ''), ''),
+    24
+  );
+
+  -- Username: letters/digits from the name, else email prefix, else id-based.
   base_username := left(
     coalesce(
       nullif(
-        regexp_replace(
-          lower(coalesce(new.raw_user_meta_data ->> 'full_name', new.raw_user_meta_data ->> 'name', '')),
-          '[^a-z0-9]+', '', 'g'
-        ),
+        regexp_replace(lower(coalesce(meta_name, email_prefix, '')), '[^a-z0-9]+', '', 'g'),
         ''
       ),
       'user-' || left(new.id::text, 8)
@@ -69,21 +85,29 @@ begin
   insert into public.profiles (id, display_name, avatar_url, username)
   values (
     new.id,
-    coalesce(new.raw_user_meta_data ->> 'full_name', new.raw_user_meta_data ->> 'name', 'Snacker'),
+    coalesce(
+      nullif(meta_name, ''),
+      nullif(initcap(email_prefix), ''),
+      'Snacker'
+    ),
     new.raw_user_meta_data ->> 'avatar_url',
     base_username
-  )
-  on conflict (id) do nothing;
-  return new;
+  )    on conflict (id) do nothing;
+    return new;
 exception
   when unique_violation then
     -- Username already taken: append a short id suffix and retry once.
+    -- (No separator: profile validation requires letters/digits only.)
     insert into public.profiles (id, display_name, avatar_url, username)
     values (
       new.id,
-      coalesce(new.raw_user_meta_data ->> 'full_name', new.raw_user_meta_data ->> 'name', 'Snacker'),
+      coalesce(
+        nullif(meta_name, ''),
+        nullif(initcap(email_prefix), ''),
+        'Snacker'
+      ),
       new.raw_user_meta_data ->> 'avatar_url',
-      left(base_username, 19) || '-' || left(new.id::text, 4)
+      left(base_username, 20) || left(new.id::text, 4)
     )
     on conflict (id) do nothing;
     return new;
@@ -94,6 +118,124 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- ---------- profile name / username validation ----------
+-- Display names are free-form (symbols welcome, duplicates allowed) but must
+-- not contain links or profanity. Usernames are the public handle in the
+-- /u/<username> URL: globally unique (unique index), 3-24 ASCII letters and
+-- digits only, never a reserved route word. Staff (owner/admin/moderator) MAY
+-- claim reserved words. INSERTs (auto-created profiles from Google/magic-link
+-- claimed reserved words (owner/admins: all; moderators: only "moderator"
+-- and "mod"; everyone else: none). INSERTs (auto-created profiles from
+-- Google/magic-link signups) are sanitized silently instead of rejected, so
+-- a weird provider name can never break sign-in. Profanity list mirrors
+-- src/lib/text-filter.ts (short words like "yed" excluded to avoid false
+-- positives inside names).
+
+create or replace function public.validate_profile_fields()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  -- Role of the writer, straight from their profile (auth.uid() works inside
+  -- security-definer; null for brand-new signups = regular user).
+  my_role text := (
+    select role from public.profiles where id = auth.uid()
+  );
+  name_clean text := regexp_replace(lower(coalesce(new.display_name, '')), '[^a-z0-9]', '', 'g');
+  username_clean text := regexp_replace(lower(coalesce(new.username, '')), '[^a-z0-9]', '', 'g');
+  -- Route words nobody below owner/admin may claim.
+  reserved text[] := array[
+    'admin','api','settings','profile','u','login','submit',
+    'combos','products','users','auth','callback',
+    'moderator','mod'
+  ];
+  -- The only reserved words moderators may claim for themselves.
+  mod_ok text[] := array['moderator','mod'];
+  name_bad boolean;
+  username_bad boolean;
+  name_changed boolean;
+  username_changed boolean;
+begin
+  -- Only judge values the writer actually changed, so grandfathered legacy
+  -- names never block an unrelated edit (INSERT judges everything).
+  if tg_op = 'INSERT' then
+    name_changed := true;
+    username_changed := true;
+  else
+    name_changed := new.display_name is distinct from old.display_name;
+    username_changed := new.username is distinct from old.username;
+  end if;
+  -- Profanity + link checks apply to everyone, staff included. Matching uses
+  -- the collapsed form so "sh!t" or "f u c k" are caught too. Unchanged
+  -- (grandfathered) values are not re-judged, so legacy names never block an
+  -- unrelated edit.
+  name_bad := name_changed
+    and (name_clean ~ '(fuck|shit|bitch|bastard|cunt|dickhead|asshole|nigger|nigga|faggot|whore|slut|kway|kwai|sommook|aihia)'
+      or coalesce(new.display_name, '') ~ '(https?://|www\.)');
+  username_bad := username_changed
+    and username_clean ~ '(fuck|shit|bitch|bastard|cunt|dickhead|asshole|nigger|nigga|faggot|whore|slut|kway|kwai|sommook|aihia)';
+
+  if name_bad then
+    if tg_op = 'INSERT' then
+      new.display_name := 'Snacker';
+    else
+      raise exception 'Your display name contains language or links we don''t allow. Please pick another.'
+        using errcode = 'check_violation';
+    end if;
+  end if;
+
+  if username_bad then
+    if tg_op = 'INSERT' then
+      new.username := null;
+    else
+      raise exception 'That username contains language we don''t allow. Please pick another.'
+        using errcode = 'check_violation';
+    end if;
+  end if;
+
+  if new.username is not null and username_changed then
+    if tg_op = 'UPDATE' then
+      if new.username !~ '^[a-z0-9]{3,24}$' then
+        raise exception 'Usernames must be 3-24 characters: English letters and numbers only (no symbols).'
+          using errcode = 'check_violation';
+      end if;
+      -- Reserved-word hierarchy: owner/admins claim anything; moderators may
+      -- claim only "moderator"/"mod"; everyone else is blocked from the list.
+      if my_role not in ('owner', 'admin') then
+        if my_role = 'moderator'
+           and lower(new.username) = any (mod_ok) then
+          null; -- moderators claiming their own title: allowed
+        elsif lower(new.username) = any (reserved) then
+          raise exception 'That username is reserved. Please pick another.'
+            using errcode = 'check_violation';
+        end if;
+      end if;
+    else
+      -- INSERT (auto-created profile): sanitize instead of rejecting.
+      if new.username !~ '^[a-z0-9]{3,24}$'
+         or (my_role not in ('owner', 'admin')
+             and lower(new.username) = any (reserved)
+             and not (my_role = 'moderator' and lower(new.username) = any (mod_ok))) then
+        new.username := null;
+      end if;
+    end if;
+  end if;
+
+  if tg_op = 'UPDATE' and name_changed and btrim(coalesce(new.display_name, '')) = '' then
+    raise exception 'Display name can''t be empty.' using errcode = 'check_violation';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists validate_profile_fields_trg on public.profiles;
+create trigger validate_profile_fields_trg
+  before insert or update of display_name, username on public.profiles
+  for each row execute function public.validate_profile_fields();
 
 -- ---------- helper: is the current user an admin? ----------
 -- (defined AFTER the profiles table it reads)

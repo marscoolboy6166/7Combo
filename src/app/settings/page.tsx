@@ -5,13 +5,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { checkProfileText } from "@/lib/text-filter";
 import { cn } from "@/lib/utils";
 
 const RESERVED = new Set([
   "admin", "api", "settings", "profile", "u", "login", "submit", "combos", "products",
+  "users", "auth", "callback",
 ]);
 
-const USERNAME_RE = /^[a-z0-9_]{3,24}$/;
+// Letters and digits only — the username is the /u/<handle> URL slug.
+const USERNAME_RE = /^[a-z0-9]{3,24}$/;
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
 const AVATAR_TYPES: Record<string, string> = {
@@ -155,6 +158,18 @@ export default function SettingsPage() {
     const name = displayName.trim();
     if (name.length < 2 || name.length > 40) {
       setMessage({ kind: "err", text: "Display name must be 2-40 characters." });
+      return;
+    }
+    // Same friendly-content rules the database enforces — this just gives
+    // instant feedback before the save hits the trigger.
+    const nameError = checkProfileText(name, "display name");
+    if (nameError) {
+      setMessage({ kind: "err", text: nameError });
+      return;
+    }
+    const usernameError = checkProfileText(handle, "username");
+    if (usernameError) {
+      setMessage({ kind: "err", text: usernameError });
       return;
     }
 
@@ -319,7 +334,8 @@ export default function SettingsPage() {
             />
           </div>
           <span className="mt-1 block text-xs text-slate-400">
-            3-24 characters: a-z, 0-9, underscore. Your page lives at <code>/u/{username || "…"}</code>.
+            3-24 characters: English letters and numbers only (no symbols). Your page lives at{" "}
+            <code>/u/{username || "…"}</code>.
           </span>
         </label>
 

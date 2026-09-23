@@ -1,6 +1,6 @@
 # 7Combo — Roadmap & Growth Ideas
 
-_Last updated: anti-spam auto-moderation BUILT (warnings + automatic timeouts, admin popup + Auto-mod overview card) — activate by running supabase/anti-spam.sql, then deploy._
+_Last updated: #8 email magic-link sign-in BUILT (code + SQL block handed over; needs one dashboard toggle). Next up: #9 user settings expansion._
 
 Ask me "what's the roadmap?" anytime and I'll re-read this file.
 
@@ -37,8 +37,8 @@ Ask me "what's the roadmap?" anytime and I'll re-read this file.
 4. ~~**Anti-spam basics**~~ — BUILT: 3 posts/hour with 2 warnings then automatic timeouts (1h → 24h), re-rate burst limit (5 per combo / 10 min), staff roles only are exempt (is_test is a badge — test accounts are NOT exempt), all enforced by database triggers; admin popup + Auto-mod card. Enforcement verified live in the DB; UI shipped with the deploy.
 5. **Site necessities pack** — contact-me link in the footer, Q&A/FAQ section, bug-report form (trust builders before promotion) — ON HOLD until the site has its own dedicated email
 6. ~~**Comments on combos**~~ — BUILT: flat comments on every combo page, posting-scope ban enforcement + comment flood limits wired into the anti-spam triggers, staff hide/unhide/delete inline. **Activate by running `supabase/comments.sql`** (one paste; requires anti-spam SQL already run — it is).
-7. **Language detector / friendly-content filter** — gently nudge or auto-flag combo text written in unsupported languages (pairs with Thai localization), plus basic profanity/spam text filtering. Roadmap only for now.
-8. **More sign-in options** — email magic links / password as a fallback to Google
+7. ~~**Language detector / friendly-content filter**~~ — BUILT: server-side filter on combo + comment posting. Rejects text mostly written in unsupported scripts (Cyrillic/Arabic/CJK/etc.; Thai romanization unaffected), common profanity incl. romanized Thai, promo-spam phrases, keyboard-mash, and link spam (comments are link-free; combos allow up to 3). Friendly messages tell the user why, and every rejection offers an **appeal**: users contest false positives, staff approve/reject in the admin Overview, and approved phrases go on a **whitelist** so the filter never blocks them again. Filter logic is app code; appeals/whitelist need `supabase/filter-appeals.sql` (one paste).
+8. ~~**More sign-in options**~~ — BUILT: **email magic links** (passwordless, shared /auth/callback with Google; login page has email field + check-your-inbox state). Needs the one SQL block (email-prefix profile names) **plus a dashboard toggle** (Auth → Providers → Email → enable magic link... it's on by default; verify). Note: built-in Supabase sender caps at ~2 emails/hour until the site email + custom SMTP arrive (same milestone as #5). LINE login is queued for later (see shinies).
 9. **User settings expansion** — notification prefs, default city, profile-visibility toggles
 10. **Cosmetics** — theme system: colors, decorations, seasonal banners (the "Site cosmetics" admin tile)
 11. **User search upgrade** — a small dedicated find-members section beyond the directory sort
@@ -51,7 +51,7 @@ Ask me "what's the roadmap?" anytime and I'll re-read this file.
 
 ## Optional shinies
 
-Custom domain on Vercel · LINE share victory-lap test · edit-in-place product modal · Run Mode PWA (in-store checklist) · pairing engine ("goes well with" suggestions) · notification center (rated / appeal decided / restricted)
+Custom domain on Vercel · **LINE login provider** (Thailand-native sign-in; LINE Developers channel + Supabase provider config, same drill as Google) · LINE share victory-lap test · edit-in-place product modal · Run Mode PWA (in-store checklist) · pairing engine ("goes well with" suggestions) · notification center (rated / appeal decided / restricted)
 
 ## Operational scars (do not relearn)
 
