@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import FilterAppealBox from "@/components/filter-appeal-box";
 
 interface Comment {
   id: string;
@@ -65,6 +66,10 @@ export default function CommentSection({ comboId }: { comboId: string }) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [filterFlag, setFilterFlag] = useState<{
+    flaggedText: string;
+    rule: string | null;
+  } | null>(null);
   const ran = useRef(false);
 
   const isStaff = role === "owner" || role === "admin" || role === "moderator";
@@ -94,6 +99,7 @@ export default function CommentSection({ comboId }: { comboId: string }) {
     setBusy(true);
     setError(null);
     setNotice(null);
+    setFilterFlag(null);
     try {
       const res = await fetch(`/api/combos/${comboId}/comments`, {
         method: "POST",
@@ -103,6 +109,7 @@ export default function CommentSection({ comboId }: { comboId: string }) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.message ?? "Could not post your comment.");
+        if (data.filterFlag) setFilterFlag(data.filterFlag);
         return;
       }
       setText("");
@@ -157,6 +164,7 @@ export default function CommentSection({ comboId }: { comboId: string }) {
 
       {/* ---- post form ---- */}
       {signedIn ? (
+        <>
         <form onSubmit={submit} className="mt-3">
           <textarea
             rows={2}
@@ -178,6 +186,15 @@ export default function CommentSection({ comboId }: { comboId: string }) {
             {error && <span className="text-xs font-medium text-red-700">{error}</span>}
           </div>
         </form>
+        {filterFlag && (
+          <FilterAppealBox
+            kind="comment"
+            flaggedText={filterFlag.flaggedText}
+            filterReason={error ?? "Filtered"}
+            context={{ combo_id: comboId }}
+          />
+        )}
+        </>
       ) : (
         <p className="mt-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
           <Link href="/login" className="font-semibold text-emerald-700 hover:underline">

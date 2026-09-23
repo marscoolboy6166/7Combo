@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { checkContent } from "@/lib/text-filter";
+
+/** Whitelist phrase row (table may not exist pre-migration). */
+interface WhitelistRow {
+  phrase: string;
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -135,6 +141,22 @@ export async function POST(
     return NextResponse.json(
       { message: "Comments are limited to 2000 characters." },
       { status: 400 },
+    );
+  }
+
+  // Friendly-content filter (roadmap #7): language, profanity, spam, no links.
+  // Staff whitelist phrases bypass profanity/spam (language/links still apply).
+  const { data: whitelistRows } = await supabase
+    .from("filter_whitelist")
+    .select("phrase");
+  const verdict = checkContent(text, {
+    noLinks: true,
+    allowedPhrases: ((whitelistRows ?? []) as unknown as WhitelistRow[]).map((r) => r.phrase),
+  });
+  if (verdict.decision === "flag") {
+    return NextResponse.json(
+      { message: verdict.reason, filterFlag: { flaggedText: text, rule: verdict.rule } },
+      { status: 422 },
     );
   }
 

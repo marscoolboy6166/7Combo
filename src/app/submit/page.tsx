@@ -8,6 +8,7 @@ import { isSupabaseConfigured, NOT_CONFIGURED_MESSAGE } from "@/lib/supabase/con
 import { baht, cn } from "@/lib/utils";
 import type { Product } from "@/lib/types";
 import BannedNotice from "@/components/banned-notice";
+import FilterAppealBox from "@/components/filter-appeal-box";
 
 interface PickerProduct extends Product {
   demo?: boolean;
@@ -37,6 +38,13 @@ export default function SubmitPage() {
   } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [filterFlag, setFilterFlag] = useState<{
+    flaggedText: string;
+    rule: string | null;
+  } | null>(null);
+  // The photo is uploaded before posting; remember it so a filter appeal
+  // snapshot can include it ("approve & post" restores the full combo).
+  const [lastPhotoUrl, setLastPhotoUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -116,12 +124,14 @@ export default function SubmitPage() {
     if (saving) return;
     setSaving(true);
     setError(null);
+    setFilterFlag(null);
     try {
       if (!isSupabaseConfigured()) {
         setError(NOT_CONFIGURED_MESSAGE);
         return;
       }
       const photo_url = await uploadPhoto();
+      setLastPhotoUrl(photo_url);
       const res = await fetch("/api/combos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -130,6 +140,7 @@ export default function SubmitPage() {
       const data = await res.json();
       if (!res.ok) {
         setError(data.message ?? "Could not post your combo.");
+        if (data.filterFlag) setFilterFlag(data.filterFlag);
         return;
       }
       router.push(`/combos/${data.slug}`);
@@ -320,7 +331,27 @@ export default function SubmitPage() {
         </section>
 
         {error && (
-          <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+          <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+            {filterFlag && (
+              <FilterAppealBox
+                kind="combo"
+                flaggedText={filterFlag.flaggedText}
+                filterReason={error}
+                context={{
+                  title,
+                  description,
+                  steps,
+                  items: selected.map((s) => ({
+                    product_id: s.product_id,
+                    quantity: s.quantity,
+                    notes: s.notes || null,
+                  })),
+                  photo_url: lastPhotoUrl,
+                }}
+              />
+            )}
+          </div>
         )}
 
         <button

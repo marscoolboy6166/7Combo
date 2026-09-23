@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import ConfirmModal, { type PendingConfirm } from "@/components/confirm-modal";
+import AutomodCard from "@/components/automod-card";
 import { cn } from "@/lib/utils";
 
 interface AdminUser {
@@ -22,7 +23,7 @@ interface AdminUser {
   appeal_at: string | null;
 }
 
-type Filter = "all" | "banned" | "appeals";
+type Filter = "all" | "banned" | "appeals" | "automod";
 
 function banStatus(u: AdminUser, now: number): { label: string; cls: string } {
   const active =
@@ -170,6 +171,7 @@ export default function AdminUsersPage() {
               ["all", `All (${users.length})`],
               ["banned", `Restricted (${activeCount})`],
               ["appeals", `Appeals (${pendingAppeals})`],
+              ["automod", "Auto-mod"],
             ] as const
           ).map(([value, label]) => (
             <button
@@ -192,6 +194,9 @@ export default function AdminUsersPage() {
         <p className="mt-3 rounded-xl bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">{message}</p>
       )}
 
+      {filter === "automod" ? (
+        <AutomodCard />
+      ) : (
       <div className="mt-4 space-y-3">
         {filtered.map((u) => {
           const badge = banStatus(u, now);
@@ -355,6 +360,7 @@ export default function AdminUsersPage() {
           </div>
         )}
       </div>
+      )}
 
       <ConfirmModal action={pending} onDone={() => setPending(null)} />
     </main>

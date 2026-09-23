@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { slugify } from "@/lib/utils";
+import { checkComboText } from "@/lib/text-filter";
 
 interface ItemInput {
   product_id?: string;
@@ -96,6 +97,26 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { message: "A combo can have at most 12 products." },
       { status: 400 },
+    );
+  }
+
+  // Friendly-content filter (roadmap #7): language, profanity, spam.
+  // Staff-approved whitelist phrases bypass the profanity/spam word rules.
+  // Missing table (migration not run) degrades to no whitelist.
+  const { data: whitelistRows } = await supabase
+    .from("filter_whitelist")
+    .select("phrase");
+  const { message, flaggedText, rule } = checkComboText({
+    title,
+    description: (body.description ?? "").trim() || null,
+    steps: (body.steps ?? "").trim() || null,
+    itemNotes: items.map((i) => (i.notes ?? "").trim()).filter(Boolean),
+    allowedPhrases: (whitelistRows ?? []).map((r) => r.phrase),
+  });
+  if (message) {
+    return NextResponse.json(
+      { message, filterFlag: { flaggedText, rule } },
+      { status: 422 },
     );
   }
 

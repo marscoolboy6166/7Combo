@@ -23,12 +23,14 @@ const ADMIN_SECTIONS = [
   { href: "/admin/products", label: "Products" },
   { href: "/admin/combos", label: "Combos" },
   { href: "/admin/users", label: "Users" },
+  { href: "/admin/filter-appeals", label: "Filter appeals" },
 ] as const;
 
 const MODERATOR_SECTIONS = [
   { href: "/admin", label: "Overview" },
   { href: "/admin/products", label: "Products" },
   { href: "/admin/combos", label: "Combos" },
+  { href: "/admin/filter-appeals", label: "Filter appeals" },
 ] as const;
 
 const SOON = [
