@@ -11,13 +11,20 @@ interface ModEvent {
   username: string | null;
   avatar_url: string | null;
   is_test: boolean | null;
-  event_type: "warning" | "timeout";
+  event_type: "warning" | "timeout" | "flood";
   action: "post" | "rate";
   scope: "posting" | "rating";
   reason: string;
   until: string | null;
   expires_at: string;
   created_at: string;
+}
+
+/** Trim the automatic-action prefixes so the popup shows the message. */
+function stripPrefix(reason: string): string {
+  if (reason.startsWith("[Automatic]")) return reason.slice("[Automatic]".length).trim();
+  if (reason.startsWith("[Flood alert]")) return reason.slice("[Flood alert]".length).trim();
+  return reason;
 }
 
 const ACK_KEY = "7combo-modpopup-ack";
@@ -111,7 +118,9 @@ export default function ModerationPopup() {
           <div>
             <h3 className="text-lg font-bold text-slate-900">Auto-mod activity</h3>
             <p className="mt-1 text-xs text-slate-500">
-              Warnings and automatic timeouts handed out by the anti-spam system (last 24h).
+              Warnings, automatic timeouts and flood alerts from the anti-spam system (last
+              24h). Posting is never blocked automatically — floods are flagged for manual
+              review.
             </p>
           </div>
           <button
@@ -127,9 +136,7 @@ export default function ModerationPopup() {
 
         <ul className="mt-4 space-y-3">
           {events.map((e) => {
-            const strip = e.reason.startsWith("[Automatic]")
-              ? e.reason.slice("[Automatic]".length).trim()
-              : e.reason;
+            const strip = stripPrefix(e.reason);
             return (
               <li
                 key={e.id}
@@ -137,7 +144,9 @@ export default function ModerationPopup() {
                   "rounded-xl border p-3",
                   e.event_type === "timeout"
                     ? "border-red-200 bg-red-50"
-                    : "border-amber-200 bg-amber-50",
+                    : e.event_type === "flood"
+                      ? "border-rose-200 bg-rose-50"
+                      : "border-amber-200 bg-amber-50",
                 )}
               >
                 <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -146,10 +155,16 @@ export default function ModerationPopup() {
                       "rounded-full px-2 py-0.5 font-bold uppercase tracking-wide",
                       e.event_type === "timeout"
                         ? "bg-red-600 text-white"
-                        : "bg-amber-500 text-white",
+                        : e.event_type === "flood"
+                          ? "bg-rose-600 text-white"
+                          : "bg-amber-500 text-white",
                     )}
                   >
-                    {e.event_type === "timeout" ? "Auto-timeout" : "Warning"}
+                    {e.event_type === "timeout"
+                      ? "Auto-timeout"
+                      : e.event_type === "flood"
+                        ? "Flood alert"
+                        : "Warning"}
                   </span>
                   <span className="font-semibold text-slate-700">
                     {e.scope === "posting" ? "posting" : "rating"}

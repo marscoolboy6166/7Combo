@@ -169,3 +169,112 @@ export async function POST(
     rating_count: combo?.rating_count ?? 0,
   });
 }
+
+/**
+ * DELETE /api/combos/[id]/rating — remove the signed-in user's rating
+ * from this combo ("unrate"). Rating-scope bans do NOT block this:
+ * removing your rating while restricted is allowed (it reduces the
+ * user's footprint) — but the burst trigger still counts the action,
+ * so rapid rate/unrate cycling trips the rating anti-spam exactly
+ * like re-rate spam does.
+ */
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json(
+      { message: "Connect Supabase (see README.md) to manage ratings." },
+      { status: 503 },
+    );
+  }
+
+  const supabase = await createClient();
+
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) {
+    return NextResponse.json(
+      { message: "Sign in to manage your ratings." },
+      { status: 401 },
+    );
+  }
+
+  if (!UUID_RE.test(id)) {
+    return NextResponse.json(
+      { message: "This combo comes from the built-in demo data." },
+      { status: 400 },
+    );
+  }
+
+  // Anti-spam pre-check: an unrate is a rating action, so a burst that
+  // just tripped (within the last 5 seconds) answers 429 here.
+  const { data: limitRow } = await supabase
+    .rpc("my_last_rate_limit_event", { p_action: "rate", p_context: id })
+    .maybeSingle();
+  const limitEvent = limitRow as RateLimitEvent | null;
+  if (limitEvent) {
+    return NextResponse.json(
+      { message: limitEvent.reason ?? "You are changing your rating too quickly — please slow down." },
+      { status: 429 },
+    );
+  }
+
+  // Return the removed rows so we can tell "nothing to remove" apart
+  // from a trigger-cancelled delete below.
+  const { data: removed, error } = await supabase
+    .from("ratings")
+    .delete()
+    .eq("combo_id", id)
+    .eq("user_id", userData.user.id)
+    .select("stars");
+
+  if (error) {
+    const { data: racedRow } = await supabase
+      .rpc("my_last_rate_limit_event", { p_action: "rate", p_context: id })
+      .maybeSingle();
+    const raced = racedRow as RateLimitEvent | null;
+    if (raced) {
+      return NextResponse.json(
+        { message: raced.reason ?? "You are changing your rating too quickly — please slow down." },
+        { status: 429 },
+      );
+    }
+    return NextResponse.json({ message: error.message }, { status: 500 });
+  }
+
+  // A BEFORE trigger that returns NULL cancels the delete WITHOUT an
+  // error, so a burst-cancelled unrate looks like zero rows removed.
+  // Re-check and answer 429 if this attempt was just blocked.
+  const { data: postRow } = await supabase
+    .rpc("my_last_rate_limit_event", { p_action: "rate", p_context: id })
+    .maybeSingle();
+  const postEvent = postRow as RateLimitEvent | null;
+  if (postEvent) {
+    return NextResponse.json(
+      { message: postEvent.reason ?? "You are changing your rating too quickly — please slow down." },
+      { status: 429 },
+    );
+  }
+
+  if (!removed || removed.length === 0) {
+    return NextResponse.json(
+      { message: "You have not rated this combo." },
+      { status: 404 },
+    );
+  }
+
+  const { data: combo } = await supabase
+    .from("combos")
+    .select("avg_rating, rating_count")
+    .eq("id", id)
+    .single();
+
+  return NextResponse.json({
+    ok: true,
+    removedStars: removed[0]?.stars ?? null,
+    avg_rating: combo?.avg_rating ?? 0,
+    rating_count: combo?.rating_count ?? 0,
+  });
+}

@@ -66,6 +66,27 @@ export default function RatingWidget({
     }
   }
 
+  async function unrate() {
+    if (saving) return;
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/combos/${comboId}/rating`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) {
+        setMessage(data.message ?? "Could not remove your rating.");
+        return;
+      }
+      setMyRating(null);
+      if (typeof data.avg_rating === "number") setAvg(data.avg_rating);
+      if (typeof data.rating_count === "number") setCount(data.rating_count);
+    } catch {
+      setMessage("Network error — try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const display = hover ?? myRating ?? 0;
 
   if (signedIn && banned) {
@@ -123,6 +144,17 @@ export default function RatingWidget({
             </span>
           ) : (
             <span>Rate this combo</span>
+          )}
+          {myRating !== null && (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={unrate}
+              className="ml-2 rounded-lg border border-slate-300 px-2 py-0.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
+              title="Remove your rating from this combo"
+            >
+              Remove my rating
+            </button>
           )}
         </div>
         <span className="ml-auto text-sm text-slate-500">

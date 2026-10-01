@@ -14,12 +14,19 @@ interface ModEvent {
   user_id: string;
   display_name: string | null;
   username: string | null;
-  event_type: "warning" | "timeout";
+  event_type: "warning" | "timeout" | "flood";
   action: "post" | "rate" | "comment";
   scope: "posting" | "rating";
   reason: string;
   until: string | null;
   created_at: string;
+}
+
+/** Trim the automatic-action prefixes so the feed shows the message. */
+function stripPrefix(reason: string): string {
+  if (reason.startsWith("[Automatic]")) return reason.slice("[Automatic]".length).trim();
+  if (reason.startsWith("[Flood alert]")) return reason.slice("[Flood alert]".length).trim();
+  return reason;
 }
 
 function timeAgo(iso: string): string {
@@ -53,6 +60,7 @@ export default function AutomodCard() {
 
   const timeouts = (events ?? []).filter((e) => e.event_type === "timeout");
   const warnings = (events ?? []).filter((e) => e.event_type === "warning");
+  const floods = (events ?? []).filter((e) => e.event_type === "flood");
 
   return (
     <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -60,19 +68,23 @@ export default function AutomodCard() {
         <div>
           <h3 className="font-bold text-slate-900">Auto-mod</h3>
           <p className="mt-0.5 text-xs text-slate-500">
-            Anti-spam: 3 posts/hour with warnings, then automatic timeouts. Rating different
-            combos is unlimited; rapid re-rating of one combo is limited. Comment floods follow
-            the same escalation.
+            Rating bursts on one combo — rating, re-rating or removing ratings — escalate from
+            warnings to automatic timeouts. Rating different combos is unlimited. Posting is
+            never blocked: more than 5 combos within an hour raises a flood alert for manual
+            review. Comment floods follow the rating escalation.
           </p>
         </div>
         {events !== null && (
-          <div className="flex gap-2 text-xs font-semibold">
+          <div className="flex flex-wrap gap-2 text-xs font-semibold">
             <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-700">
               {warnings.length} warning{warnings.length === 1 ? "" : "s"}
             </span>
             <span className="rounded-full bg-red-50 px-3 py-1 text-red-700">
               {timeouts.length} timeout{timeouts.length === 1 ? "" : "s"}
-</span>
+            </span>
+            <span className="rounded-full bg-rose-50 px-3 py-1 text-rose-700">
+              {floods.length} flood{floods.length === 1 ? "" : "s"}
+            </span>
           </div>
         )}
       </div>
@@ -95,10 +107,12 @@ export default function AutomodCard() {
                   className={
                     e.event_type === "timeout"
                       ? "mr-2 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase text-red-700"
-                      : "mr-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700"
+                      : e.event_type === "flood"
+                        ? "mr-2 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase text-rose-700"
+                        : "mr-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700"
                   }
                 >
-                  {e.event_type === "timeout" ? "timeout" : "warning"}
+                  {e.event_type === "timeout" ? "timeout" : e.event_type === "flood" ? "flood" : "warning"}
                 </span>
                 <Link
                   href={`/admin/users/${e.user_id}`}
@@ -108,11 +122,7 @@ export default function AutomodCard() {
                 </Link>
                 {e.username && <span className="text-slate-400"> @{e.username}</span>}
                 <span className="text-slate-500"> · {e.scope}</span>
-                <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">
-                  {e.reason.startsWith("[Automatic]")
-                    ? e.reason.slice("[Automatic]".length).trim()
-                    : e.reason}
-                </p>
+                <p className="mt-0.5 line-clamp-1 text-xs text-slate-500">{stripPrefix(e.reason)}</p>
               </div>
               <span className="shrink-0 text-xs text-slate-400">{timeAgo(e.created_at)}</span>
             </li>
