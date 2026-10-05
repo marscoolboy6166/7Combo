@@ -1,6 +1,6 @@
 # 7Combo — Roadmap & Growth Ideas
 
-_Last updated: #5 site necessities pack BUILT (`pending`) — footer contact link, /faq Q&A, /report bug-report form + staff queue at /admin/reports (SQL not yet run). Next up: #9 user settings expansion._
+_Last updated: #5 site necessities pack DEPLOYED (`203e543`) — footer contact link, /faq Q&A, /report bug-report form + staff queue at /admin/reports. One step left: paste `supabase/site-necessities.sql` into the Supabase SQL Editor. Next up: #9 user settings expansion._
 
 Ask me "what's the roadmap?" anytime and I'll re-read this file.
 
