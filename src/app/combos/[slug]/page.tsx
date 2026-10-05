@@ -3,9 +3,12 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import RatingWidget from "@/components/rating-widget";
 import CommentSection from "@/components/comment-section";
+import ComboOwnerActions from "@/components/combo-owner-actions";
 import IngredientChip from "@/components/ingredient-chip";
 import Stars from "@/components/stars";
 import { getComboBySlug, getCombos } from "@/lib/data";
+import { createClient } from "@/lib/supabase/server";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { baht } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +51,15 @@ export default async function ComboDetailPage({
   const combo = await getComboBySlug(slug);
   if (!combo) notFound();
 
+  // Who is looking? The author gets owner actions (delete).
+  let viewerId: string | null = null;
+  if (isSupabaseConfigured()) {
+    const supabase = await createClient();
+    const { data } = await supabase.auth.getUser();
+    viewerId = data.user?.id ?? null;
+  }
+  const isAuthor = Boolean(viewerId) && viewerId === combo.author_id;
+
   const items = combo.items ?? [];
   const total = items.reduce(
     (sum, i) => sum + Number(i.product?.price_thb ?? 0) * (i.quantity || 1),
@@ -87,6 +99,10 @@ export default async function ComboDetailPage({
           {total > 0 && <span className="font-semibold text-slate-700">~{baht(total)} total</span>}
         </div>
       </header>
+
+      {isAuthor && (
+        <ComboOwnerActions comboId={combo.id} comboTitle={combo.title} />
+      )}
 
       {combo.photo_url && (
         <div className="relative mt-6 h-64 w-full overflow-hidden rounded-2xl border border-slate-200 sm:h-80">

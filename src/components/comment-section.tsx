@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import FilterAppealBox from "@/components/filter-appeal-box";
+import ConfirmModal, { type PendingConfirm } from "@/components/confirm-modal";
 
 interface Comment {
   id: string;
@@ -70,6 +71,7 @@ export default function CommentSection({ comboId }: { comboId: string }) {
     flaggedText: string;
     rule: string | null;
   } | null>(null);
+  const [pending, setPending] = useState<PendingConfirm | null>(null);
   const ran = useRef(false);
 
   const isStaff = role === "owner" || role === "admin" || role === "moderator";
@@ -120,35 +122,71 @@ export default function CommentSection({ comboId }: { comboId: string }) {
     }
   }
 
-  async function moderate(comment: Comment, action: "hide" | "unhide" | "delete") {
+  async function moderate(comment: Comment, action: "hide" | "unhide") {
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
-      const res =
-        action === "delete"
-          ? await fetch(`/api/admin/comments?id=${comment.id}`, { method: "DELETE" })
-          : await fetch("/api/admin/comments", {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ id: comment.id, action }),
-            });
+      const res = await fetch("/api/admin/comments", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: comment.id, action }),
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.message ?? "Moderation action failed.");
         return;
       }
       setNotice(
-        action === "delete"
-          ? "Comment deleted."
-          : action === "hide"
-            ? "Comment hidden from the public."
-            : "Comment restored.",
+        action === "hide" ? "Comment hidden from the public." : "Comment restored.",
       );
       await load();
     } finally {
       setBusy(false);
     }
+  }
+
+  /**
+   * Permanent delete — authors delete their own via the combo's
+   * comment endpoint; staff use the admin endpoint (any comment).
+   */
+  async function deleteComment(comment: Comment) {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = isStaff
+        ? await fetch(`/api/admin/comments?id=${comment.id}`, { method: "DELETE" })
+        : await fetch(`/api/combos/${comboId}/comments`, {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ commentId: comment.id }),
+          });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.message ?? "Could not delete the comment.");
+        return;
+      }
+      setNotice("Comment deleted.");
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function askDelete(comment: Comment) {
+    setPending({
+      title: "Delete this comment?",
+      body: (
+        <>
+          The comment will be <strong>permanently removed</strong> — this can&apos;t
+          be undone.
+        </>
+      ),
+      confirmLabel: "Delete comment",
+      danger: true,
+      onConfirm: () => deleteComment(comment),
+    });
   }
 
   const list = comments ?? [];
@@ -283,7 +321,7 @@ export default function CommentSection({ comboId }: { comboId: string }) {
                       ))}
                     {(isStaff || mine) && (
                       <button
-                        onClick={() => moderate(c, "delete")}
+                        onClick={() => askDelete(c)}
                         disabled={busy}
                         className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
                       >
@@ -297,6 +335,8 @@ export default function CommentSection({ comboId }: { comboId: string }) {
           })}
         </ul>
       )}
+
+      <ConfirmModal action={pending} onDone={() => setPending(null)} />
     </section>
   );
 }

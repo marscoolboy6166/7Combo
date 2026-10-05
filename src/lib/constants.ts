@@ -4,9 +4,6 @@ export const DEFAULT_CITY = "chiangmai";
 export const CITIES = [
   { value: "chiangmai", label: "Chiang Mai" },
   { value: "bangkok", label: "Bangkok" },
-  { value: "chiangrai", label: "Chiang Rai" },
-  { value: "pattaya", label: "Pattaya" },
-  { value: "phuket", label: "Phuket" },
   { value: "all", label: "Nationwide" },
 ] as const;
 

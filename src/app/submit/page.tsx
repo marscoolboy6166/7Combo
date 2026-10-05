@@ -21,11 +21,20 @@ interface SelectedItem {
   product: PickerProduct;
 }
 
+/** "instant-noodles" → "Instant noodles" for select labels. */
+function formatCategory(slug: string): string {
+  return slug
+    .split("-")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 export default function SubmitPage() {
   const router = useRouter();
   const [products, setProducts] = useState<PickerProduct[]>([]);
   const [demo, setDemo] = useState(false);
   const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("");
   const [selected, setSelected] = useState<SelectedItem[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -69,19 +78,29 @@ export default function SubmitPage() {
       .catch(() => setBanState(null));
   }, []);
 
+  /** Distinct catalog categories with product counts, A→Z. */
+  const categories = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of products) {
+      counts.set(p.category, (counts.get(p.category) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [products]);
+
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
     const chosen = new Set(selected.map((s) => s.product_id));
     return products
       .filter((p) => !chosen.has(p.id))
+      .filter((p) => !category || p.category === category)
       .filter(
         (p) =>
           !needle ||
           p.name_en.toLowerCase().includes(needle) ||
           (p.name_th ?? "").includes(search.trim()),
       )
-      .slice(0, 8);
-  }, [products, search, selected]);
+      .slice(0, 12);
+  }, [products, search, selected, category]);
 
   const total = selected.reduce(
     (sum, s) => sum + Number(s.product.price_thb) * s.quantity,
@@ -248,14 +267,29 @@ export default function SubmitPage() {
           )}
 
           <div className="relative mt-3">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search products to add…"
-              className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
-            />
-            {search.trim() && (
+            <div className="flex gap-2">
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                aria-label="Product category"
+                className="w-44 shrink-0 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
+              >
+                <option value="">All categories</option>
+                {categories.map(([name, count]) => (
+                  <option key={name} value={name}>
+                    {formatCategory(name)} ({count})
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search products to add…"
+                className="min-w-0 flex-1 rounded-xl border border-slate-300 px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
+              />
+            </div>
+            {(search.trim() || category) && (
               <ul className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-xl border border-slate-200 bg-white shadow-lg">
                 {filtered.length === 0 && (
                   <li className="px-4 py-3 text-sm text-slate-400">No matches</li>
@@ -269,6 +303,7 @@ export default function SubmitPage() {
                     >
                       <span className="text-lg">{p.emoji}</span>
                       <span className="font-medium text-slate-800">{p.name_en}</span>
+                      <span className="text-xs text-slate-400">{formatCategory(p.category)}</span>
                       <span className="ml-auto text-slate-400">{baht(Number(p.price_thb))}</span>
                     </button>
                   </li>

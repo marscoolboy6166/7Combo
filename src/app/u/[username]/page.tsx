@@ -5,7 +5,10 @@ import ComboCard from "@/components/combo-card";
 import EmptyState from "@/components/empty-state";
 import MyBanStatus from "@/components/my-ban-status";
 import ProfileAdminActions from "@/components/profile-admin-actions";
+import ComboDeleteBadge from "@/components/combo-delete-badge";
 import { getProfileByUsername, getCombosByAuthor, getUserStats } from "@/lib/data";
+import { createClient } from "@/lib/supabase/server";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +37,16 @@ export default async function ProfilePage({
 
   const combos = await getCombosByAuthor(profile.id);
   const stats = await getUserStats(profile.id);
+
+  // The author browsing their own profile gets delete badges
+  // on their combo cards.
+  let viewerId: string | null = null;
+  if (isSupabaseConfigured()) {
+    const supabase = await createClient();
+    const { data } = await supabase.auth.getUser();
+    viewerId = data.user?.id ?? null;
+  }
+  const isOwnProfile = Boolean(viewerId) && viewerId === profile.id;
   const ratingsReceived = stats.ratings_received;
   const weightedSum = combos.reduce(
     (sum, c) => sum + Number(c.avg_rating) * c.rating_count,
@@ -128,7 +141,15 @@ export default async function ProfilePage({
         {combos.length > 0 ? (
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {combos.map((combo) => (
-              <ComboCard key={combo.id} combo={combo} />
+              <div key={combo.id} className="group relative">
+                <ComboCard combo={combo} />
+                {isOwnProfile && (
+                  <ComboDeleteBadge
+                    comboId={combo.id}
+                    comboTitle={combo.title}
+                  />
+                )}
+              </div>
             ))}
           </div>
         ) : (

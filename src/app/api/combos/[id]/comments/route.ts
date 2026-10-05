@@ -221,3 +221,91 @@ export async function POST(
 
   return NextResponse.json({ ok: true, comment }, { status: 201 });
 }
+
+/**
+ * DELETE /api/combos/[id]/comments
+ * Body: { commentId }
+ * The author permanently deletes their own comment. Staff
+ * moderation (any comment) lives in /api/admin/comments.
+ * Ownership is re-verified here; the "Authors or staff delete
+ * comments" RLS policy is the second lock.
+ */
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json(
+      { message: "Connect Supabase (see README.md) to delete comments." },
+      { status: 503 },
+    );
+  }
+  if (!UUID_RE.test(id)) {
+    return NextResponse.json(
+      { message: "This combo comes from built-in demo data — comments need the real database." },
+      { status: 400 },
+    );
+  }
+
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) {
+    return NextResponse.json({ message: "Sign in to delete your comments." }, { status: 401 });
+  }
+
+  let body: { commentId?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ message: "Invalid request body." }, { status: 400 });
+  }
+
+  const commentId = typeof body.commentId === "string" ? body.commentId : "";
+  if (!UUID_RE.test(commentId)) {
+    return NextResponse.json({ message: "Valid comment id is required." }, { status: 400 });
+  }
+
+  const { data: comment, error: fetchError } = await supabase
+    .from("combo_comments")
+    .select("id, author_id")
+    .eq("id", commentId)
+    .eq("combo_id", id)
+    .maybeSingle();
+
+  if (fetchError) {
+    // Missing table (migration not run) — same degradation as GET.
+    if (
+      fetchError.code === "42P01" ||
+      fetchError.code === "PGRST205" ||
+      /does not exist|could not find the table/i.test(fetchError.message ?? "")
+    ) {
+      return NextResponse.json(
+        { message: "Comments are not available yet — run the comments migration." },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json({ message: fetchError.message }, { status: 500 });
+  }
+  if (!comment) {
+    return NextResponse.json({ message: "Comment not found." }, { status: 404 });
+  }
+  if (comment.author_id !== userData.user.id) {
+    return NextResponse.json(
+      { message: "You can only delete your own comments." },
+      { status: 403 },
+    );
+  }
+
+  const { error: deleteError } = await supabase
+    .from("combo_comments")
+    .delete()
+    .eq("id", commentId);
+
+  if (deleteError) {
+    return NextResponse.json({ message: deleteError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true });
+}

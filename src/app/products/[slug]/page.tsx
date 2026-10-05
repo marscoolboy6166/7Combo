@@ -4,7 +4,7 @@ import ComboCard from "@/components/combo-card";
 import ProductVisual from "@/components/product-visual";
 import { getProductBySlug, getCombos, isDemoData } from "@/lib/data";
 import { getSelectedCity } from "@/lib/get-city";
-import { categoryLabel, cityLabel } from "@/lib/constants";
+import { CITIES, categoryLabel, cityLabel } from "@/lib/constants";
 import { baht } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -80,17 +80,14 @@ export default async function ProductDetailPage({
           Where you can find it
         </h2>
         <div className="mt-2 flex flex-wrap gap-2 text-sm">
-          {product.cities.includes("all")
-            ? ["bangkok", "chiangmai", "chiangrai", "pattaya", "phuket"].map((c) => (
-                <span key={c} className="rounded-full border border-slate-200 bg-white px-3 py-1">
-                  📍 {cityLabel(c)}
-                </span>
-              ))
-            : product.cities.map((c) => (
-                <span key={c} className="rounded-full border border-slate-200 bg-white px-3 py-1">
-                  📍 {cityLabel(c)}
-                </span>
-              ))}
+          {(product.cities.includes("all")
+            ? CITIES.filter((c) => c.value !== "all").map((c) => c.value)
+            : product.cities
+          ).map((c) => (
+            <span key={c} className="rounded-full border border-slate-200 bg-white px-3 py-1">
+              📍 {cityLabel(c)}
+            </span>
+          ))}
         </div>
       </section>
 

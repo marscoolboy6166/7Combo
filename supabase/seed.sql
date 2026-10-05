@@ -48,16 +48,16 @@ insert into public.products (slug, name_en, name_th, category, price_thb, descri
   ('maggi-seasoning', 'Maggi Seasoning (mini)', 'ซอสปรุงรส มักกี้', 'sauce', 18, 'A few drops fix everything savory.', '🟡', '{all}'),
   ('mayonnaise', 'Mayonnaise (Kewpie-style)', 'มายองเนส', 'sauce', 35, 'Rich, tangy mayo — half of every good dip.', '🥫', '{all}'),
   ('suki-sauce', 'Suki Sauce', 'น้ำจิ้มสุกี้', 'sauce', 30, 'Sweet-spicy sukiyaki dip.', '🥫', '{all}'),
-  ('mala-hotpot-sauce', 'Mala Hotpot Sauce', 'ซอสหม่าล่า', 'sauce', 45, 'Numbing Sichuan heat in a pouch.', '🔥', '{bangkok,chiangmai,phuket}'),
+  ('mala-hotpot-sauce', 'Mala Hotpot Sauce', 'ซอสหม่าล่า', 'sauce', 45, 'Numbing Sichuan heat in a pouch.', '🔥', '{bangkok,chiangmai}'),
   ('nam-prik-kapi', 'Shrimp Paste Chili Dip (Nam Prik Kapi)', 'น้ำพริกกะปิ', 'sauce', 28, 'Pungent, salty, beloved.', '🦐', '{all}'),
   ('parmesan-powder', 'Parmesan Cheese Powder Shaker', 'ผงชีสพาร์เมซาน', 'sauce', 25, 'Shaker of cheesy umami dust.', '🧀', '{all}'),
 
   -- Ready to eat
   ('imitation-crab-sticks', 'Imitation Crab Sticks (chilled)', 'เกาไหร่ / ปูอัด', 'ready-to-eat', 20, 'Chilled shredded crab sticks — the dippable legend.', '🦀', '{all}'),
-  ('edamame', 'Edamame (chilled pack)', 'เอดามาเมะ', 'ready-to-eat', 25, 'Salted soybean pods, ready to snack.', '🫛', '{bangkok,chiangmai,phuket,pattaya}'),
+  ('edamame', 'Edamame (chilled pack)', 'เอดามาเมะ', 'ready-to-eat', 25, 'Salted soybean pods, ready to snack.', '🫛', '{bangkok,chiangmai}'),
   ('hard-boiled-eggs', 'Hard-Boiled Eggs 2-pack', 'ไข่ต้มสุก 2 ฟอง', 'ready-to-eat', 15, 'Protein on the go.', '🥚', '{all}'),
   ('onigiri-tuna-mayo', 'Onigiri Tuna Mayo', 'โอนิกิริ ทูน่ามายองเนส', 'ready-to-eat', 25, 'Triangular rice ball, tuna mayo center.', '🍙', '{all}'),
-  ('salmon-sushi-pack', 'Salmon Sushi Pack', 'ซูชิแซลมอน', 'ready-to-eat', 49, 'A little box of nigiri.', '🍣', '{bangkok,chiangmai,phuket}'),
+  ('salmon-sushi-pack', 'Salmon Sushi Pack', 'ซูชิแซลมอน', 'ready-to-eat', 49, 'A little box of nigiri.', '🍣', '{bangkok,chiangmai}'),
   ('toastie-ham-cheese', 'Toastie Ham & Cheese', 'แซนด์วิชชีสแฮมอบ', 'ready-to-eat', 35, 'Grilled ham-and-cheese sandwich from the hot case.', '🥪', '{all}'),
   ('chicken-basil-rice', 'Chicken Basil Rice Box', 'ข้าวกะเพราไก่ไข่ดาว', 'ready-to-eat', 45, 'Khao krapao with a fried egg, microwave and go.', '🍱', '{all}'),
   ('hot-dog-roller', 'Hot Dog on the Roller', 'ฮอทดอก', 'ready-to-eat', 15, 'The spinning rollers deliver.', '🌭', '{all}'),
@@ -69,7 +69,7 @@ insert into public.products (slug, name_en, name_th, category, price_thb, descri
   ('butter-croissant', 'Butter Croissant', 'ครัวซองต์เนย', 'ready-to-eat', 15, 'Flaky, buttery, always near the till.', '🥐', '{all}'),
 
   -- Frozen
-  ('fish-roe-tobiko', 'Fish Roe (Tobiko) Pack', 'ไข่ปลาโทบิโกะ', 'frozen', 39, 'Little poppy fish roe — the viral dip starter.', '🔴', '{bangkok,chiangmai,phuket}'),
+  ('fish-roe-tobiko', 'Fish Roe (Tobiko) Pack', 'ไข่ปลาโทบิโกะ', 'frozen', 39, 'Little poppy fish roe — the viral dip starter.', '🔴', '{bangkok,chiangmai}'),
   ('shrimp-wontons', 'Shrimp Wontons (frozen)', 'เกี๊ยวกุ้ง', 'frozen', 35, 'Boil-at-home or hack in-store.', '🥟', '{all}'),
   ('fish-tofu-balls', 'Fish Tofu Balls', 'ลูกชิ้นปลา', 'frozen', 30, 'Bouncy fish balls for noodle hacks.', '🐟', '{all}'),
   ('frozen-fries', 'French Fries (frozen)', 'เฟรนช์ฟรายส์', 'frozen', 35, 'Air-fry at home for instant fries.', '🍟', '{all}'),
@@ -80,7 +80,7 @@ insert into public.products (slug, name_en, name_th, category, price_thb, descri
 
   -- Instant noodles
   ('mama-tom-yum', 'Mama Tom Yum Goong (instant)', 'มาม่า ต้มยำกุ้ง', 'instant-noodles', 14, 'The national noodle. Accept no substitutes.', '🍜', '{all}'),
-  ('mama-mala', 'Mama Mala (instant)', 'มาม่า หม่าล่า', 'instant-noodles', 16, 'The spicy-numbing cousin of classic Mama.', '🍜', '{bangkok,chiangmai,phuket,pattaya}'),
+  ('mama-mala', 'Mama Mala (instant)', 'มาม่า หม่าล่า', 'instant-noodles', 16, 'The spicy-numbing cousin of classic Mama.', '🍜', '{bangkok,chiangmai}'),
   ('mama-pa-lo', 'Mama Pa-Lo (stewed pork)', 'มาม่า พะโล้หมู', 'instant-noodles', 14, 'Five-spice stewed pork flavor.', '🍜', '{all}'),
   ('wai-wai-oriental', 'Wai Wai Oriental Style', 'ไวไว', 'instant-noodles', 12, 'The other classic — softer noodles, mellow broth.', '🍜', '{all}'),
   ('yentafo-instant', 'Yen Ta Fo Instant Noodles', 'เย็นตาโฟ บะหมี่เกี๊ยว', 'instant-noodles', 15, 'Pink sauce noodle soup, sweet-savory.', '🍜', '{all}'),

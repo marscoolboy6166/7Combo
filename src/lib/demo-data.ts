@@ -59,19 +59,19 @@ const C = (
 });
 
 export const DEMO_PRODUCTS: Array<Product & { demo: true }> = [
-  P("fish-roe-tobiko", "Fish Roe (Tobiko) Pack", "ไข่ปลาโทบิโกะ", "frozen", 39, "🔴", ["bangkok", "chiangmai", "phuket"]),
+  P("fish-roe-tobiko", "Fish Roe (Tobiko) Pack", "ไข่ปลาโทบิโกะ", "frozen", 39, "🔴", ["bangkok", "chiangmai"]),
   P("mayonnaise", "Mayonnaise (Kewpie-style)", "มายองเนส", "sauce", 35, "🥫"),
   P("imitation-crab-sticks", "Imitation Crab Sticks (chilled)", "เกาไหร่ / ปูอัด", "ready-to-eat", 20, "🦀"),
   P("mama-tom-yum", "Mama Tom Yum Goong (instant)", "มาม่า ต้มยำกุ้ง", "instant-noodles", 14, "🍜"),
   P("taro-fish-snack", "Taro Fish Snack (Original)", "ทาโร่ ปลาแท้", "snack", 10, "🐟"),
   P("vanilla-ice-cream-cup", "Vanilla Ice Cream Cup", "ไอศกรีมวานิลลา", "frozen", 15, "🍦"),
   P("cha-tra-mue-thai-milk-tea", "Cha Tra Mue Thai Milk Tea (bottle)", "ชาตรามือ", "drink", 29, "🧋"),
-  P("mama-mala", "Mama Mala (instant)", "มาม่า หม่าล่า", "instant-noodles", 16, "🍜", ["bangkok", "chiangmai", "phuket", "pattaya"]),
+  P("mama-mala", "Mama Mala (instant)", "มาม่า หม่าล่า", "instant-noodles", 16, "🍜", ["bangkok", "chiangmai"]),
   P("hard-boiled-eggs", "Hard-Boiled Eggs 2-pack", "ไข่ต้มสุก 2 ฟอง", "ready-to-eat", 15, "🥚"),
   P("fish-tofu-balls", "Fish Tofu Balls", "ลูกชิ้นปลา", "frozen", 30, "🐟"),
   P("sriracha-mayo-packet", "Sriracha Mayo Packet", "มายองเนสศรีราชา", "sauce", 10, "🥫"),
   P("butter-roll-bread", "Butter Roll Bread", "ขนมปังเนย", "dessert", 12, "🍞"),
-  P("edamame", "Edamame (chilled pack)", "เอดามาเมะ", "ready-to-eat", 25, "🫛", ["bangkok", "chiangmai", "phuket", "pattaya"]),
+  P("edamame", "Edamame (chilled pack)", "เอดามาเมะ", "ready-to-eat", 25, "🫛", ["bangkok", "chiangmai"]),
   P("lays-salted-plum", "Lay's Norwegian Salted Plum", "เลย์ พลัมเค็ม", "snack", 20, "🥔"),
   P("calbee-shrimp-chips", "Calbee Shrimp Chips", "คาลบี กุ้ง", "snack", 20, "🍤"),
   P("oishi-green-tea-honey-lemon", "Oishi Green Tea Honey-Lemon", "โออิชิ ชาเขียว น้ำผึ้งมะนาว", "drink", 20, "🍵"),
