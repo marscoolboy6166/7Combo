@@ -25,7 +25,7 @@ const SECTIONS: Array<{
       },
       {
         q: "Which cities are covered?",
-        a: "Chiang Mai first, then Bangkok, Chiang Rai, Pattaya, Phuket, and nationwide products. The city selector in the header filters the catalog and combos to what's actually on shelves near you.",
+        a: "Chiang Mai and Bangkok for now — more cities land as the catalog grows. The city selector in the header filters the catalog and combos to what's actually on shelves near you.",
       },
       {
         q: "Is it free?",
@@ -77,10 +77,6 @@ const SECTIONS: Array<{
             3–24 letters and digits, unique, and can&apos;t claim reserved words.
           </>
         ),
-      },
-      {
-        q: "What are the roles?",
-        a: "Everyone starts as a user. Moderators handle combo and comment moderation; admins also manage users, roles, and bans. There is exactly one owner, assigned directly in the database.",
       },
     ],
   },
