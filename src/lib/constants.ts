@@ -44,11 +44,10 @@ export const APP_TAGLINE = "Level up your 7-Eleven run.";
 
 /**
  * The site's dedicated contact email (roadmap #5).
- * TODO: replace this placeholder with the real address — it is the
- * one constant to edit when the mailbox is live (footer, FAQ, bug
- * report confirmations all read it from here).
+ * The real mailbox — footer, FAQ, and bug-report confirmations
+ * all read it from here.
  */
-export const SITE_EMAIL = "hello@7combo.example";
+export const SITE_EMAIL = "7combo.official@gmail.com";
 
 /** Sorting options for product listings (public catalog + admin table). */
 export const PRODUCT_SORTS = [
