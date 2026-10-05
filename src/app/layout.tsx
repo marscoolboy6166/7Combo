@@ -5,7 +5,8 @@ import BanWatcher from "@/components/ban-watcher";
 import SetupNotice from "@/components/setup-notice";
 import { CityProvider } from "@/lib/city-context";
 import { getSelectedCity } from "@/lib/get-city";
-import { APP_NAME, APP_TAGLINE } from "@/lib/constants";
+import Link from "next/link";
+import { APP_NAME, APP_TAGLINE, SITE_EMAIL } from "@/lib/constants";
 import "./globals.css";
 
 function resolveSiteUrl(): URL {
@@ -51,13 +52,26 @@ export default async function RootLayout({
           <AdminFab />
           <div className="flex-1">{children}</div>
           <footer className="border-t border-slate-200 bg-white">
-            <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-4 py-6 text-sm text-slate-500 sm:flex-row">
+            <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 py-6 text-sm text-slate-500 sm:flex-row">
               <p>
                 🏪 <span className="font-semibold text-slate-700">{APP_NAME}</span> — {APP_TAGLINE}{" "}
                 <span className="text-slate-400">An unofficial fan project. Not affiliated with 7-Eleven.</span>
               </p>
-              <p className="text-slate-400">Made with 🇹🇭 in Chiang Mai</p>
+              <nav className="flex items-center gap-4" aria-label="Footer">
+                <Link href="/faq" className="hover:text-emerald-700 hover:underline">
+                  FAQ
+                </Link>
+                <Link href="/report" className="hover:text-emerald-700 hover:underline">
+                  Report a bug
+                </Link>
+                <a href={`mailto:${SITE_EMAIL}`} className="hover:text-emerald-700 hover:underline">
+                  Contact
+                </a>
+              </nav>
             </div>
+            <p className="pb-5 text-center text-xs text-slate-400">
+              Made with 🇹🇭 in Chiang Mai
+            </p>
           </footer>
         </CityProvider>
       </body>

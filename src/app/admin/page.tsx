@@ -38,6 +38,13 @@ const TILES = [
     ready: true,
   },
   {
+    href: "/admin/reports",
+    title: "Bug reports",
+    description:
+      "User-submitted bug reports with the page they happened on. Resolve with a note.",
+    ready: true,
+  },
+  {
     href: null,
     title: "Site cosmetics",
     description: "Colors, decorations, banners. Planned — not built yet.",
@@ -50,8 +57,8 @@ export default function AdminOverviewPage() {
     <main>
       <h2 className="text-2xl font-bold tracking-tight">Manage 7Combo</h2>
       <p className="mt-1 text-sm text-slate-500">
-        Pick a section. Products, combos and filter appeals are open to moderators; users and
-        roles are admin-only.
+        Pick a section. Products, combos, filter appeals and bug reports are open to
+        moderators; users and roles are admin-only.
       </p>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">

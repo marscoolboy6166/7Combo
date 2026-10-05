@@ -42,6 +42,14 @@ export function categoryEmoji(value: string) {
 export const APP_NAME = "7Combo";
 export const APP_TAGLINE = "Level up your 7-Eleven run.";
 
+/**
+ * The site's dedicated contact email (roadmap #5).
+ * TODO: replace this placeholder with the real address — it is the
+ * one constant to edit when the mailbox is live (footer, FAQ, bug
+ * report confirmations all read it from here).
+ */
+export const SITE_EMAIL = "hello@7combo.example";
+
 /** Sorting options for product listings (public catalog + admin table). */
 export const PRODUCT_SORTS = [
   { value: "name", label: "Name (A → Z)" },
