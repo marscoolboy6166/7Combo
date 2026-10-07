@@ -1,6 +1,6 @@
 # 7Combo — Roadmap & Growth Ideas
 
-_Last updated: authors can now delete their own combos + comments (in-app confirm, ownership re-checked server-side, RLS as second lock). Next up: #9 user settings expansion._
+_Last updated: #5 SQL pack verified live in the DB (`bug_reports` table + all 4 functions probe-tested executing). Authors delete own combos + comments; catalog is Chiang Mai + Bangkok only. New sections: **crash prevention & scaling triggers**, **community-stage updates**. Next up: #9 user settings expansion._
 
 Ask me "what's the roadmap?" anytime and I'll re-read this file.
 
@@ -35,12 +35,12 @@ Ask me "what's the roadmap?" anytime and I'll re-read this file.
 2. ~~Admin hub + combo moderation~~ — DONE
 3. ~~Users & bans (roles, owner hierarchy, appeals)~~ — DONE and deployed
 4. ~~**Anti-spam basics**~~ — BUILT: 3 posts/hour with 2 warnings then automatic timeouts (1h → 24h), re-rate burst limit (5 per combo / 10 min), staff roles only are exempt (is_test is a badge — test accounts are NOT exempt), all enforced by database triggers; admin popup + Auto-mod card. Enforcement verified live in the DB; UI shipped with the deploy.
-5. **Site necessities pack** — BUILT, awaiting the one-time SQL paste: footer contact link + FAQ + Report-a-bug links, `/faq` Q&A page (site basics, posting/rating, accounts, moderation), `/report` bug form (sign-in required, auto-captures the page URL, content-filtered, flood caps 5 open / 10 per day), reports land in a `bug_reports` table with a staff queue at `/admin/reports` (open-first, resolve with a note the reporter sees). `SITE_EMAIL` is the real mailbox (`7combo.official@gmail.com`, deployed `7157bcc`). Code degrades gracefully until the SQL runs; paste `supabase/site-necessities.sql` (also mirrored at the bottom of `supabase/schema.sql`) into the SQL Editor.
+5. ~~**Site necessities pack**~~ — DONE and fully live (SQL paste verified in the DB: `bug_reports` table + `submit_bug_report` / `my_bug_reports` / `admin_list_bug_reports` / `staff_resolve_bug_report` all probe-tested executing their guards): footer contact link + FAQ + Report-a-bug links, `/faq` Q&A page, `/report` bug form (sign-in required, auto-captures the page URL, content-filtered, flood caps 5 open / 10 per day), reports land in a `bug_reports` table with a staff queue at `/admin/reports` (open-first, resolve with a note the reporter sees). `SITE_EMAIL` is the real mailbox (`7combo.official@gmail.com`, deployed `7157bcc`).
 6. ~~**Comments on combos**~~ — DONE and live (SQL run): flat comments on every combo page, posting-scope ban enforcement + comment flood limits wired into the anti-spam triggers, staff hide/unhide/delete inline, authors delete their own comments (confirmed, permanent).
 7. ~~**Language detector / friendly-content filter**~~ — DONE and deployed (`30f65c3`): server-side filter on combo + comment posting. Rejects text mostly written in unsupported scripts (Cyrillic/Arabic/CJK/etc.; Thai romanization unaffected), common profanity incl. romanized Thai, promo-spam phrases, keyboard-mash, and link spam (comments are link-free; combos allow up to 3). Friendly messages tell the user why, and every rejection offers an **appeal**: users contest false positives, staff approve/reject on the dedicated `/admin/filter-appeals` page, and approved phrases go on a **whitelist** so the filter never blocks them again (SQL already run; tables verified live).
 8. ~~**More sign-in options**~~ — DONE and deployed (`e8ff2c2`): **email magic links** (passwordless, shared /auth/callback with Google; email field + check-your-inbox state). Supabase auto-links any sign-in sharing a verified email into ONE account — fresh email = new account, Google with that email later = same account. Remaining: verify Auth → Providers → Email has magic link on (default) and remember the built-in sender caps ~2 emails/hour until site email + custom SMTP (same milestone as #5). LINE login stays queued (see shinies).
 8b. ~~**Profile name/username rules**~~ — DONE and fully live (code deployed in `e8ff2c2`; v2 trigger verified in the database via `pg_get_functiondef`): display names free-form (symbols, duplicates) but 2–40 chars, no links/profanity; usernames 3–24 **letters+digits only**, unique, reserved route words blocked — owner/admins exempt from ALL reserved words, moderators may claim only `moderator`/`mod`; `combo` is NOT reserved (combolover14 welcome). Enforced by `validate_profile_fields` trigger (UPDATE rejects with friendly errors; INSERT auto-created profiles sanitize silently); grandfathered legacy names never block unrelated edits. Settings page mirrors the rules client-side (note: its reserved-word hint isn't role-aware yet — DB is the real gate).
-9. **User settings expansion** — notification prefs, default city, profile-visibility toggles
+9. **User settings expansion** — IN PROGRESS (agreed scope): **default city** (account-level `profiles.default_city`; header dropdown stays a per-device cookie), **notification center** (`notifications` table + security-definer triggers on ratings/comments, header bell + `/notifications`, settings toggles the triggers check per-user), **members-only `/users` directory** (sign-in gate). Privacy toggles deliberately DEFERRED by owner decision — revisit in the community-stage section if demand appears.
 10. **Cosmetics** — theme system: colors, decorations, seasonal banners (the "Site cosmetics" admin tile)
 11. **User search upgrade** — a small dedicated find-members section beyond the directory sort
 12. **Privacy/terms page**
@@ -49,6 +49,39 @@ Ask me "what's the roadmap?" anytime and I'll re-read this file.
 15. **New-this-week feed** (later: catalog automation program)
 16. **Thai language** localization
 17. Start promotion (FB groups, Reddit, Shorts) once 4–13 are in place
+
+## Crash prevention & scaling (revisit when numbers climb)
+
+Current scale (8 combos, 74 products, small traffic) sits far below every limit — deliberately parked. Act when these trip, not before:
+
+- **~180 combos** — `fetchCombos` pins `.limit(200)`; combo #201+ would silently vanish from every page. Fix then: `getComboBySlug` → single-row `.eq("slug")` query + unique index on `combos.slug`, then paginate the lists.
+- **~1–2k products** — `getProducts()` fetches the whole active catalog per request and search/filter runs in JS after fetching. Fix then: SQL-level search/filter (`ilike` + `.contains`) and range pagination — already noted in `data.ts`.
+- **~10k ratings** — the `/users` stats scan (`listRatingsForStats`) loads rating rows wholesale per view. Fix then: a group-by RPC (counts per user).
+- **Hundreds of simultaneous visitors** — every page is `force-dynamic` and uncached, so each view = 3–5 Supabase queries. Fix first (biggest win, smallest change): `revalidate = 60` (ISR) on public list/detail pages.
+
+Crash prevention (worth doing regardless of growth):
+
+- **Error boundaries** — add Next.js `error.tsx` / `global-error.tsx` so a failed render shows a friendly retry screen, never a raw Vercel crash page.
+- **Uptime + alerts** — free monitor (UptimeRobot / Better Stack) on the homepage; alert before users tweet about downtime.
+- **Backups** — confirm Supabase daily backups exist; move to PITR before the community stage.
+- **Keep graceful degradation** — `data.ts` falls back to empty/demo data + a loud console error on query failure; preserve that pattern for every new query.
+- **No untested SQL on prod** — existing scar stands: Supabase runs each paste as ONE transaction; rehearse long pastes in a scratch project first.
+- **Verify deploys** — check `api.github.com/repos/marscoolboy6166/7Combo/commits/<sha>/status` after every push (existing scar).
+
+## When there's already a community (post-traction updates)
+
+Parked until there's steady daily activity — pull items up as the community demands them:
+
+- **Moderation at scale** — recruit 1–2 trusted regulars as moderators (owner/admin promote), agree queue SLAs, report-driven removals on top of `/admin/reports`.
+- **Trust levels** — auto-trust long-standing active members (badge on profile, lighter friction); anti-spam caps stay for everyone else.
+- **Combo of the week** — editorial pick pinned on the homepage (pairs with the LINE official account from Growth #5).
+- **Weekly digest email** — top new combos + challenge winners; needs custom SMTP (same milestone as #8's sender cap).
+- **Notification center** — rated / replied / appeal decided / restricted (promotes from shinies once there's activity to notify about).
+- **City battles live** — leaderboards become monthly Bangkok vs Chiang Mai events with a homepage banner (flywheel #6, now two-city native).
+- **Community hub + guidelines** — LINE/Discord group, a public community-guidelines page, moderation transparency (what gets hidden and why).
+- **Recurring events** — seasonal challenges (Songkran collection, "best under ฿50") as calendar beats (flywheel #4).
+- **Analytics baseline** — Vercel analytics + Supabase logs: DAU, retention, top combos — decide from data, not vibes.
+- **Scaling gate** — before promoting any of the above, re-check the crash-prevention section.
 
 ## Optional shinies
 
