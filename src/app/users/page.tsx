@@ -1,16 +1,53 @@
 import Link from "next/link";
 import Image from "next/image";
 import { searchProfiles } from "@/lib/data";
+import { createClient } from "@/lib/supabase/server";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Snackers" };
 
+/**
+ * Members-only (roadmap #9): the directory is community space, so
+ * signed-out visitors get a friendly gate instead of the member list.
+ */
 export default async function UsersPage({
   searchParams,
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
+  let signedIn = false;
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = await createClient();
+      const { data } = await supabase.auth.getUser();
+      signedIn = Boolean(data.user);
+    } catch {
+      signedIn = false;
+    }
+  }
+
+  if (!signedIn) {
+    return (
+      <main className="mx-auto w-full max-w-xl px-4 py-16 text-center">
+        <div className="rounded-2xl border border-slate-200 bg-white p-10 shadow-sm">
+          <span className="text-5xl">🧑‍🍳</span>
+          <h1 className="mt-4 text-2xl font-bold tracking-tight">Snackers</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            The member directory is for the community — sign in to browse it.
+          </p>
+          <Link
+            href="/login?next=/users"
+            className="mt-6 inline-block rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white hover:bg-emerald-700"
+          >
+            Sign in
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
   const { q } = await searchParams;
   const query = q?.trim() ?? "";
   const users = await searchProfiles(query);

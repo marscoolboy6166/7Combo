@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { checkProfileText } from "@/lib/text-filter";
+import { CITIES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 const RESERVED = new Set([
@@ -31,6 +32,11 @@ export default function SettingsPage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [userId, setUserId] = useState("");
+  const [defaultCity, setDefaultCity] = useState("chiangmai");
+  const [notifyRating, setNotifyRating] = useState(true);
+  const [notifyComment, setNotifyComment] = useState(true);
+  const [cityMsg, setCityMsg] = useState<string | null>(null);
+  const [notifMsg, setNotifMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [avatarBusy, setAvatarBusy] = useState(false);
@@ -55,12 +61,15 @@ export default function SettingsPage() {
       setUserId(data.user.id);
       const { data: profile } = await supabase
         .from("profiles")
-        .select("display_name, username, avatar_url")
+        .select("display_name, username, avatar_url, default_city, notify_rating, notify_comment")
         .eq("id", data.user.id)
         .maybeSingle();
       setDisplayName(profile?.display_name ?? "");
       setUsername(profile?.username ?? "");
       setAvatarUrl(profile?.avatar_url ?? null);
+      if (profile?.default_city) setDefaultCity(profile.default_city);
+      if (typeof profile?.notify_rating === "boolean") setNotifyRating(profile.notify_rating);
+      if (typeof profile?.notify_comment === "boolean") setNotifyComment(profile.notify_comment);
       setState("ready");
     });
   }, []);
@@ -205,6 +214,36 @@ export default function SettingsPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  /** Save a single profile column (city / notification prefs). */
+  async function saveSetting(field: string, value: string | boolean, onDone: () => void) {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("profiles")
+      .update({ [field]: value })
+      .eq("id", userId);
+    if (error) {
+      onDone();
+      return error.message;
+    }
+    onDone();
+    return null;
+  }
+
+  async function changeCity(value: string) {
+    setCityMsg(null);
+    setDefaultCity(value);
+    const err = await saveSetting("default_city", value, () => {});
+    setCityMsg(err ?? "Saved ✓");
+  }
+
+  async function toggleNotify(field: "notify_rating" | "notify_comment", value: boolean) {
+    setNotifMsg(null);
+    if (field === "notify_rating") setNotifyRating(value);
+    else setNotifyComment(value);
+    const err = await saveSetting(field, value, () => {});
+    setNotifMsg(err ?? "Saved ✓");
   }
 
   if (!isSupabaseConfigured()) {
@@ -354,6 +393,72 @@ export default function SettingsPage() {
           )}
         </div>
       </form>
+
+      {/* Home city (roadmap #9) — account-level default; the header
+          dropdown stays a per-device cookie on top of this. */}
+      <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Home city</h2>
+        <label className="mt-3 block text-sm font-medium text-slate-600">
+          Default city for new devices
+          <select
+            value={defaultCity}
+            onChange={(e) => changeCity(e.target.value)}
+            className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+          >
+            {CITIES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-xs text-slate-400">
+            Used when you sign in on a browser you haven&apos;t picked a city on yet. The header
+            dropdown stays per-device.
+          </span>
+        </label>
+        {cityMsg && (
+          <p className={cn("mt-2 text-xs", cityMsg.includes("✓") ? "text-emerald-700" : "text-red-600")}>
+            {cityMsg}
+          </p>
+        )}
+      </section>
+
+      {/* Notifications (roadmap #9) — toggles are checked by the DB
+          triggers, so they take effect immediately. */}
+      <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Notifications</h2>
+        <div className="mt-3 flex flex-col gap-3 text-sm">
+          <label className="flex cursor-pointer items-center justify-between gap-4">
+            <span>
+              <span className="font-medium text-slate-700">Ratings on my combos</span>
+              <span className="block text-xs text-slate-400">Someone stars one of your combos.</span>
+            </span>
+            <input
+              type="checkbox"
+              checked={notifyRating}
+              onChange={(e) => toggleNotify("notify_rating", e.target.checked)}
+              className="h-4 w-4 shrink-0 accent-emerald-600"
+            />
+          </label>
+          <label className="flex cursor-pointer items-center justify-between gap-4">
+            <span>
+              <span className="font-medium text-slate-700">Comments on my combos</span>
+              <span className="block text-xs text-slate-400">Someone replies on one of your combos.</span>
+            </span>
+            <input
+              type="checkbox"
+              checked={notifyComment}
+              onChange={(e) => toggleNotify("notify_comment", e.target.checked)}
+              className="h-4 w-4 shrink-0 accent-emerald-600"
+            />
+          </label>
+        </div>
+        {notifMsg && (
+          <p className={cn("mt-2 text-xs", notifMsg.includes("✓") ? "text-emerald-700" : "text-red-600")}>
+            {notifMsg}
+          </p>
+        )}
+      </section>
 
       <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Account</h2>

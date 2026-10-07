@@ -1373,3 +1373,128 @@ grant execute on function public.admin_list_bug_reports() to authenticated;
 
 revoke execute on function public.staff_resolve_bug_report(uuid, text) from anon, authenticated;
 grant execute on function public.staff_resolve_bug_report(uuid, text) to authenticated;
+
+
+-- ============================================================
+-- Roadmap #9 — user settings expansion + notification center
+-- Default city (account-level), notification prefs, notifications.
+-- Run-once block shipped as a chat SQL paste; mirrored here.
+-- ============================================================
+
+-- ---------- profiles: new setting columns ----------
+alter table public.profiles add column if not exists default_city text not null default 'chiangmai';
+alter table public.profiles add column if not exists notify_rating boolean not null default true;
+alter table public.profiles add column if not exists notify_comment boolean not null default true;
+
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'profiles_default_city_check') then
+    alter table public.profiles add constraint profiles_default_city_check
+      check (default_city in ('chiangmai', 'bangkok', 'all'));
+  end if;
+end $$;
+
+-- profiles uses column-level update grants — extend the list or the new
+-- columns are unwritable despite the RLS policy.
+revoke update on public.profiles from anon, authenticated;
+grant update (display_name, username, avatar_url, default_city, notify_rating, notify_comment)
+  on public.profiles to authenticated;
+
+-- ---------- notifications table ----------
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  type text not null check (type in ('rating', 'comment')),
+  actor_id uuid references public.profiles(id) on delete set null,
+  combo_id uuid references public.combos(id) on delete cascade,
+  is_read boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists notifications_user_idx
+  on public.notifications (user_id, is_read, created_at desc);
+
+alter table public.notifications enable row level security;
+
+drop policy if exists "Users read own notifications" on public.notifications;
+create policy "Users read own notifications"
+  on public.notifications for select
+  using (auth.uid() = user_id);
+
+drop policy if exists "Users update own notifications" on public.notifications;
+create policy "Users update own notifications"
+  on public.notifications for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Users delete own notifications" on public.notifications;
+create policy "Users delete own notifications"
+  on public.notifications for delete
+  using (auth.uid() = user_id);
+
+-- Inserts happen ONLY inside the security-definer trigger functions below,
+-- so users can never forge a notification.
+revoke insert on public.notifications from anon, authenticated;
+grant select, update (is_read), delete on public.notifications to authenticated;
+
+-- ---------- trigger functions (security definer) ----------
+
+-- Someone rated your combo → notification (skipped for self-ratings
+-- and when the author has prefs off).
+create or replace function public.notify_on_rating()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_author uuid;
+  v_notify boolean;
+begin
+  select author_id, notify_rating into v_author, v_notify
+  from public.combos where id = new.combo_id;
+
+  if v_author is null or v_author = new.user_id or v_notify is not true then
+    return new;
+  end if;
+
+  insert into public.notifications (user_id, type, actor_id, combo_id)
+  values (v_author, 'rating', new.user_id, new.combo_id);
+
+  return new;
+end;
+$$;
+
+drop trigger if exists notify_on_rating on public.ratings;
+create trigger notify_on_rating
+  after insert on public.ratings
+  for each row execute function public.notify_on_rating();
+
+-- Someone commented on your combo → notification (same skips).
+create or replace function public.notify_on_comment()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_author uuid;
+  v_notify boolean;
+begin
+  select author_id, notify_comment into v_author, v_notify
+  from public.combos where id = new.combo_id;
+
+  if v_author is null or v_author = new.author_id or v_notify is not true then
+    return new;
+  end if;
+
+  insert into public.notifications (user_id, type, actor_id, combo_id)
+  values (v_author, 'comment', new.author_id, new.combo_id);
+
+  return new;
+end;
+$$;
+
+drop trigger if exists notify_on_comment on public.combo_comments;
+create trigger notify_on_comment
+  after insert on public.combo_comments
+  for each row execute function public.notify_on_comment();

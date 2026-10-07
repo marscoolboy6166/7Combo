@@ -58,6 +58,7 @@ export default function Header() {
   const [me, setMe] = useState<Me | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [avatarOpen, setAvatarOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
   const pathname = usePathname();
   const router = useRouter();
   const avatarBoxRef = useRef<HTMLDivElement>(null);
@@ -90,6 +91,32 @@ export default function Header() {
       alive = false;
     };
   }, [pathname]);
+
+  // Unread notification count (roadmap #9). Refetches on navigation
+  // and window focus. Missing table (SQL not pasted) degrades to 0.
+  useEffect(() => {
+    if (!me || !isSupabaseConfigured()) {
+      setUnread(0);
+      return;
+    }
+    const userId = me.id;
+    const supabase = createClient();
+    let alive = true;
+    async function refreshCount() {
+      const { count } = await supabase
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("is_read", false);
+      if (alive) setUnread(count ?? 0);
+    }
+    refreshCount();
+    window.addEventListener("focus", refreshCount);
+    return () => {
+      alive = false;
+      window.removeEventListener("focus", refreshCount);
+    };
+  }, [me, pathname]);
 
   // Close the avatar dropdown when clicking elsewhere
   useEffect(() => {
@@ -141,6 +168,32 @@ export default function Header() {
         </nav>
 
         <div className="hidden items-center gap-2 md:flex">
+          {me && (
+            <Link
+              href="/notifications"
+              title="Notifications"
+              aria-label={`Notifications${unread > 0 ? ` — ${unread} unread` : ""}`}
+              className="relative rounded-lg p-2 text-slate-600 transition hover:bg-slate-100"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+              </svg>
+              {unread > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                  {unread > 9 ? "9+" : unread}
+                </span>
+              )}
+            </Link>
+          )}
           <Link
             href="/submit"
             className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
@@ -261,6 +314,13 @@ export default function Header() {
                     <p className="truncate text-xs text-slate-400">{me.email}</p>
                   </div>
                 </div>
+                <Link
+                  href="/notifications"
+                  onClick={() => setMenuOpen(false)}
+                  className="rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                >
+                  🔔 Notifications{unread > 0 ? ` (${unread > 9 ? "9+" : unread})` : ""}
+                </Link>
                 <Link
                   href="/profile"
                   onClick={() => setMenuOpen(false)}

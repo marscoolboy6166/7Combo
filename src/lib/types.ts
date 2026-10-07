@@ -25,6 +25,31 @@ export interface Profile {
   /** Official test-account marker — cosmetic badge only, no permissions. */
   is_test: boolean;
   created_at: string;
+  /** Account-level city fallback when a device has no city cookie. */
+  default_city?: string;
+  /** Notification prefs — checked by DB triggers before inserting. */
+  notify_rating?: boolean;
+  notify_comment?: boolean;
+}
+
+/** One row of the user's notification feed (roadmap #9). */
+export interface NotificationItem {
+  id: string;
+  user_id: string;
+  type: "rating" | "comment";
+  actor_id: string | null;
+  combo_id: string | null;
+  is_read: boolean;
+  created_at: string;
+  actor?: {
+    display_name: string;
+    username: string | null;
+    avatar_url: string | null;
+  } | null;
+  combo?: {
+    slug: string;
+    title: string;
+  } | null;
 }
 
 /** Profile row as seen by admins — includes role, test flag, ban/appeal state. */
