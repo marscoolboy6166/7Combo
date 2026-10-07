@@ -99,3 +99,4 @@ Custom domain on Vercel · **LINE login provider** (Thailand-native sign-in; LIN
 - **Profanity lists live in TWO places** — `src/lib/text-filter.ts` (content) and the `validate_profile_fields` trigger in schema.sql (names). Update both together or name/content rules drift apart
 - If file-edit tools suddenly get refused mid-session (platform gate), tell the user and end the turn — a fresh "go" message clears it; never loop on write_todos
 - Magic-link/OTP signups create profiles named from the email prefix (handle_new_user); identity auto-linking means one account per verified email across all providers
+- plpgsql trigger bodies resolve SQL at RUNTIME, not paste time — a bad column reference inside a trigger function installs cleanly and silently breaks writes later (the #9 notify triggers first queried profiles-only prefs on combos). After any trigger paste, fire one real write through it before calling it done

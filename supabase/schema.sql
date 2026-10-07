@@ -1450,8 +1450,10 @@ declare
   v_author uuid;
   v_notify boolean;
 begin
-  select author_id, notify_rating into v_author, v_notify
-  from public.combos where id = new.combo_id;
+  select c.author_id, p.notify_rating into v_author, v_notify
+  from public.combos c
+  join public.profiles p on p.id = c.author_id
+  where c.id = new.combo_id;
 
   if v_author is null or v_author = new.user_id or v_notify is not true then
     return new;
@@ -1480,8 +1482,10 @@ declare
   v_author uuid;
   v_notify boolean;
 begin
-  select author_id, notify_comment into v_author, v_notify
-  from public.combos where id = new.combo_id;
+  select c.author_id, p.notify_comment into v_author, v_notify
+  from public.combos c
+  join public.profiles p on p.id = c.author_id
+  where c.id = new.combo_id;
 
   if v_author is null or v_author = new.author_id or v_notify is not true then
     return new;
