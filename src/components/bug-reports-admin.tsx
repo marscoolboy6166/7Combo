@@ -44,6 +44,7 @@ export default function BugReportsAdmin() {
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [showResolved, setShowResolved] = useState(false);
+  const [role, setRole] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const ran = useRef(false);
@@ -71,6 +72,11 @@ export default function BugReportsAdmin() {
     if (ran.current) return;
     ran.current = true;
     load();
+    // Resolving is owner-only; everyone else can read the queue.
+    fetch("/api/admin/session")
+      .then((r) => r.json())
+      .then((d: { role?: string | null }) => setRole(d.role ?? null))
+      .catch(() => setRole(null));
   }, [load]);
 
   async function resolve(id: string) {
@@ -118,8 +124,9 @@ export default function BugReportsAdmin() {
         <div>
           <h3 className="font-bold text-slate-900">Bug reports</h3>
           <p className="mt-0.5 text-xs text-slate-500">
-            Reports users filed at /report, with the page they were on. Resolve
-            with an optional note — the reporter sees it on their own history.
+            Reports users filed at /report, with the page they were on. Only the
+            site owner resolves them — with an optional note the reporter sees on
+            their own history. Staff can read the queue and flag anything urgent.
           </p>
         </div>
         {reports !== null && (
@@ -129,7 +136,7 @@ export default function BugReportsAdmin() {
               open.length > 0 ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500",
             )}
           >
-            {open.length} open
+            {open.length} unresolved
           </span>
         )}
       </div>
@@ -168,7 +175,7 @@ export default function BugReportsAdmin() {
             <li key={r.id} className="py-4">
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">
-                  open
+                  unresolved
                 </span>
                 <Link
                   href={`/admin/users/${r.user_id}`}
@@ -195,7 +202,11 @@ export default function BugReportsAdmin() {
               </p>
 
               <div className="mt-3">
-                {resolvingId === r.id ? (
+                {role !== "owner" ? (
+                  <p className="text-xs text-slate-400">
+                    Only the site owner can resolve bug reports — let them know.
+                  </p>
+                ) : resolvingId === r.id ? (
                   <div className="flex flex-col gap-2">
                     <label className="text-xs text-slate-500">
                       Note for the reporter (optional — shown on their report

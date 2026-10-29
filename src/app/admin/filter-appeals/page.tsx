@@ -1,6 +1,7 @@
 "use client";
 
 import FilterAppealsAdmin from "@/components/filter-appeals-admin";
+import FilterAlertsCard from "@/components/filter-alerts-card";
 
 /**
  * Admin → Filter appeals: the user-facing friendly-content filter can
@@ -16,6 +17,7 @@ export default function AdminFilterAppealsPage() {
           Contest filter rejections and manage the phrase whitelist.
         </span>
       </div>
+      <FilterAlertsCard />
       <FilterAppealsAdmin />
     </main>
   );

@@ -723,6 +723,8 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_found boolean;
 begin
   if not public.is_admin() then
     raise exception 'Admin access required';
@@ -746,7 +748,26 @@ begin
          appeal_status = case when p_appeal = 'upheld' then 'upheld' else appeal_status end,
          appeal_at = case when p_appeal = 'upheld' then now() else appeal_at end
    where id = p_target;
-  return found;
+  v_found := found;
+
+  -- Lifting a restriction resolves that user's open auto-mod alerts, so a
+  -- resolved alert never pops up again. Guarded on the column so this file
+  -- still works when supabase/anti-spam.sql has not been re-run yet.
+  if v_found and exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'moderation_events'
+      and column_name = 'resolution'
+  ) then
+    update public.moderation_events
+       set resolved_at = now(),
+           resolved_by = auth.uid(),
+           resolution = 'unbanned'
+     where user_id = p_target
+       and resolved_at is null;
+  end if;
+
+  return v_found;
 end;
 $$;
 
@@ -944,44 +965,22 @@ create policy "Staff delete product images"
 revoke select on public.profiles from anon, authenticated;
 grant select (id, display_name, username, avatar_url, is_admin, role, is_test, created_at) on public.profiles to anon, authenticated;
 
--- Role / test-flag management: admin-only, through functions (users have
--- no direct UPDATE grant on these columns — self-promotion stays closed).
-create or replace function public.admin_set_role(p_target uuid, p_role text)
-returns boolean
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if not public.is_admin() then
-    raise exception 'Admin access required';
-  end if;
-  if p_role = 'owner' then
-    raise exception 'The owner role is assigned directly in the database and cannot be granted through the app';
-  end if;
-  if p_role not in ('user', 'moderator', 'admin') then
-    raise exception 'Invalid role';
-  end if;
-  if p_target = auth.uid() then
-    raise exception 'You cannot change your own role';
-  end if;
-  if exists (select 1 from public.profiles where id = p_target and role = 'owner') then
-    raise exception 'The owner role cannot be changed';
-  end if;
-  update public.profiles set role = p_role where id = p_target;
-  return found;
-end;
-$$;
+-- Role / test-flag management: through functions only (users have no
+-- direct UPDATE grant on these columns — self-promotion stays closed).
+-- BOTH are owner-only now: roles (owner_grant_role below) and the official
+-- test-account flag (owner_set_test). Admins get bans, timeouts and appeals
+-- and nothing else.
+drop function if exists public.admin_set_test(uuid, boolean);
 
-create or replace function public.admin_set_test(p_target uuid, p_is_test boolean)
+create or replace function public.owner_set_test(p_target uuid, p_is_test boolean)
 returns boolean
 language plpgsql
 security definer
 set search_path = public
 as $$
 begin
-  if not public.is_admin() then
-    raise exception 'Admin access required';
+  if not public.is_owner() then
+    raise exception 'Owner access required';
   end if;
   update public.profiles set is_test = p_is_test where id = p_target;
   return found;
@@ -1029,10 +1028,106 @@ begin
 end;
 $$;
 
-revoke execute on function public.admin_set_role(uuid, text) from anon, authenticated;
-revoke execute on function public.admin_set_test(uuid, boolean) from anon, authenticated;
-grant execute on function public.admin_set_role(uuid, text) to authenticated;
-grant execute on function public.admin_set_test(uuid, boolean) to authenticated;
+revoke execute on function public.owner_set_test(uuid, boolean) from public, anon, authenticated;
+grant execute on function public.owner_set_test(uuid, boolean) to authenticated;
+
+-- ============================================================
+-- Role grant function (what POST /api/admin/users?action=grant_role
+-- calls). Security definer + an internal is_owner() check, so a crafted
+-- request can never promote anyone — admin access is NOT enough.
+--
+-- Refuses the owner role, self-changes, and targets that already are the
+-- owner. Logs to public.role_change_events so the promoted user gets the
+-- one-time “your role changed” popup.
+-- ============================================================
+
+create table if not exists public.role_change_events (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  changed_by uuid references public.profiles(id) on delete set null,
+  old_role text not null,
+  new_role text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists role_change_events_user_idx
+  on public.role_change_events (user_id, created_at desc);
+
+alter table public.role_change_events enable row level security;
+-- Written only by the security-definer functions below and read only
+-- through my_recent_role_changes(): no grants for anon/authenticated.
+revoke all on public.role_change_events from anon, authenticated;
+
+-- Role changes are OWNER-ONLY. Every older admin entry point is dropped
+-- outright so a stale client can never grant a role:
+--   admin_grant_role — superseded (dropped in both parameter orders)
+--   admin_set_role   — the even older entry point
+-- Admins keep ban/timeout + appeal powers and the test-account flag, and
+-- that is all. Re-running this script on a live project removes the old
+-- functions from the schema cache too.
+drop function if exists public.admin_grant_role(text, uuid);
+drop function if exists public.admin_grant_role(uuid, text);
+drop function if exists public.admin_set_role(uuid, text);
+drop function if exists public.owner_grant_role(text, uuid);
+
+create or replace function public.owner_grant_role(p_target uuid, p_role text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_old text;
+begin
+  if not public.is_owner() then
+    raise exception 'Owner access required';
+  end if;
+  if p_role is null or p_role not in ('user', 'moderator', 'admin') then
+    raise exception 'Invalid role';
+  end if;
+  if p_target = auth.uid() then
+    raise exception 'You cannot change your own role';
+  end if;
+  select role into v_old from public.profiles where id = p_target;
+  if v_old is null then
+    return false;
+  end if;
+  if v_old = 'owner' then
+    raise exception 'The owner role cannot be changed';
+  end if;
+  if v_old = p_role then
+    return true;
+  end if;
+  update public.profiles set role = p_role where id = p_target;
+  insert into public.role_change_events (user_id, changed_by, old_role, new_role)
+  values (p_target, auth.uid(), v_old, p_role);
+  return true;
+end;
+$$;
+
+-- Latest role change for the signed-in user (root layout popup). Only
+-- returns a row while the logged change still matches the current role,
+-- so a later demotion can never leave a stale “you are now admin”.
+create or replace function public.my_recent_role_changes()
+returns table (user_id uuid, event_type text, role text, changed_at timestamptz)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select e.user_id, 'role_change'::text, e.new_role, e.created_at
+  from public.role_change_events e
+  join public.profiles p on p.id = e.user_id
+  where e.user_id = auth.uid()
+    and p.role = e.new_role
+    and e.created_at > now() - interval '24 hours'
+  order by e.created_at desc
+  limit 1;
+$$;
+
+revoke execute on function public.owner_grant_role(uuid, text) from public, anon, authenticated;
+grant execute on function public.owner_grant_role(uuid, text) to authenticated;
+revoke execute on function public.my_recent_role_changes() from public, anon, authenticated;
+grant execute on function public.my_recent_role_changes() to authenticated;
 
 -- ============================================================
 -- Anti-spam auto-moderation (posting/rating limits, warnings,
@@ -1316,11 +1411,36 @@ as $$
   limit 50;
 $$;
 
+-- Per-staff reminder counter for the bug-report queue. A new report pops
+-- up THREE times for each staff member before it stays quiet for them, so an
+-- unanswered bug gets a fair chance of being noticed. Acknowledging is
+-- personal and never changes the report; resolving it (owner_resolve_bug_
+-- report) is what marks it resolved for everyone.
+create table if not exists public.bug_report_acks (
+  report_id uuid not null references public.bug_reports(id) on delete cascade,
+  staff_id uuid not null references public.profiles(id) on delete cascade,
+  seen_count integer not null default 1 check (seen_count between 1 and 3),
+  created_at timestamptz not null default now(),
+  primary key (report_id, staff_id)
+);
+-- Safety for projects that created the table before the counter existed.
+alter table public.bug_report_acks
+  add column if not exists seen_count integer not null default 1;
+create index if not exists bug_report_acks_staff_idx
+  on public.bug_report_acks (staff_id, created_at desc);
+
+alter table public.bug_report_acks enable row level security;
+revoke all on public.bug_report_acks from anon, authenticated;
+
+-- Return shape changed (seen_count), so drop first: Postgres cannot change
+-- a function's OUT row type via CREATE OR REPLACE.
+drop function if exists public.admin_list_bug_reports();
 create or replace function public.admin_list_bug_reports()
 returns table (
   id uuid, user_id uuid, display_name text, username text,
   page_url text, description text, status text, staff_note text,
-  created_at timestamptz, resolved_at timestamptz
+  created_at timestamptz, resolved_at timestamptz,
+  seen_count integer
 )
 language sql
 security definer
@@ -1328,7 +1448,12 @@ set search_path = public
 as $$
   select r.id, r.user_id, p.display_name, p.username,
          r.page_url, r.description, r.status, r.staff_note,
-         r.created_at, r.resolved_at
+         r.created_at, r.resolved_at,
+         coalesce(
+           (select a.seen_count from public.bug_report_acks a
+            where a.report_id = r.id and a.staff_id = auth.uid()),
+           0
+         ) as seen_count
   from public.bug_reports r
   join public.profiles p on p.id = r.user_id
   where public.is_staff()
@@ -1336,7 +1461,41 @@ as $$
   limit 200;
 $$;
 
-create or replace function public.staff_resolve_bug_report(
+-- Bump the caller's reminder counter (max 3) for the reports in p_ids.
+create or replace function public.admin_ack_bug_report(p_ids uuid[])
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_count integer;
+begin
+  if not public.is_staff() then
+    raise exception 'Staff access required';
+  end if;
+  if p_ids is null or array_length(p_ids, 1) is null then
+    return 0;
+  end if;
+  insert into public.bug_report_acks (report_id, staff_id, seen_count)
+  select r.id, auth.uid(), 1
+  from public.bug_reports r
+  where r.id = any (p_ids)
+  on conflict (report_id, staff_id) do update
+     set seen_count = least(public.bug_report_acks.seen_count + 1, 3),
+         created_at = now();
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$$;
+
+-- Resolving a bug report means fixing the code, so only the owner does it.
+-- The old staff-level function is dropped so an admin cannot reach it even
+-- with a hand-crafted RPC call. Admins and moderators still see the queue
+-- and the alert popup.
+drop function if exists public.staff_resolve_bug_report(uuid, text);
+
+create or replace function public.owner_resolve_bug_report(
   p_report uuid, p_note text default null
 )
 returns boolean
@@ -1345,8 +1504,8 @@ security definer
 set search_path = public
 as $$
 begin
-  if not public.is_staff() then
-    raise exception 'Staff access required';
+  if not public.is_owner() then
+    raise exception 'Owner access required';
   end if;
   update public.bug_reports
      set status = 'resolved',
@@ -1371,8 +1530,11 @@ grant execute on function public.my_bug_reports() to authenticated;
 revoke execute on function public.admin_list_bug_reports() from anon, authenticated;
 grant execute on function public.admin_list_bug_reports() to authenticated;
 
-revoke execute on function public.staff_resolve_bug_report(uuid, text) from anon, authenticated;
-grant execute on function public.staff_resolve_bug_report(uuid, text) to authenticated;
+revoke execute on function public.owner_resolve_bug_report(uuid, text) from public, anon, authenticated;
+grant execute on function public.owner_resolve_bug_report(uuid, text) to authenticated;
+
+revoke execute on function public.admin_ack_bug_report(uuid[]) from public, anon, authenticated;
+grant execute on function public.admin_ack_bug_report(uuid[]) to authenticated;
 
 
 -- ============================================================

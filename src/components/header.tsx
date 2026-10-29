@@ -95,22 +95,20 @@ export default function Header() {
   // Unread notification count (roadmap #9). Refetches on navigation
   // and window focus. Missing table (SQL not pasted) degrades to 0.
   useEffect(() => {
-    if (!me || !isSupabaseConfigured()) {
-      setUnread(0);
-      return;
-    }
-    const userId = me.id;
-    const supabase = createClient();
     let alive = true;
     async function refreshCount() {
-      const { count } = await supabase
+      if (!me || !isSupabaseConfigured()) {
+        if (alive) setUnread(0);
+        return;
+      }
+      const { count } = await createClient()
         .from("notifications")
         .select("id", { count: "exact", head: true })
-        .eq("user_id", userId)
+        .eq("user_id", me.id)
         .eq("is_read", false);
       if (alive) setUnread(count ?? 0);
     }
-    refreshCount();
+    void refreshCount();
     window.addEventListener("focus", refreshCount);
     return () => {
       alive = false;

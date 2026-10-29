@@ -13,10 +13,11 @@ const DURATION_OPTIONS = [
 ] as const;
 
 /**
- * Visible only to admins, on public profile pages: a Ban/timeout quick
- * action. Hidden entirely for admin and owner targets (admins cannot ban
- * admins or themselves — the database refuses it too). The full management
- * page remains at /admin/users/<id>.
+ * Visible on public profile pages to staff: a Ban/timeout quick action and a
+ * link to the full management page. Roles are never edited from here — that
+ * only happens on the admin user page. Hidden entirely for the viewer on
+ * their own profile and on owner profiles; admins cannot ban other admins or
+ * the owner. The DB enforces the same rules underneath.
  */
 export default function ProfileAdminActions({
   userId,
@@ -28,7 +29,7 @@ export default function ProfileAdminActions({
   const [session, setSession] = useState<{ role: string | null; viewerId: string | null } | null>(
     null,
   );
-  const [open, setOpen] = useState(false);
+  const [banOpen, setBanOpen] = useState(false);
   const [scope, setScope] = useState<"posting" | "rating" | "both">("both");
   const [duration, setDuration] = useState<string>("7d");
   const [reason, setReason] = useState("");
@@ -91,10 +92,10 @@ export default function ProfileAdminActions({
     <div className="mt-3">
       <div className="flex flex-wrap items-center gap-2">
         <button
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => setBanOpen((v) => !v)}
           className={cn(
             "rounded-xl px-3.5 py-2 text-xs font-semibold transition",
-            open
+            banOpen
               ? "bg-slate-900 text-white"
               : "border border-red-200 bg-white text-red-600 hover:bg-red-50",
           )}
@@ -109,7 +110,11 @@ export default function ProfileAdminActions({
         </Link>
       </div>
 
-      {open && (
+      {msg && !banOpen && (
+        <p className="mt-2 text-xs font-medium text-emerald-700">{msg}</p>
+      )}
+
+      {banOpen && (
         <form
           onSubmit={ban}
           className="mt-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"

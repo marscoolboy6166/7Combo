@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import ModerationPopup from "@/components/moderation-popup";
+import FilterAlertPopup from "@/components/filter-alert-popup";
+import BugReportPopup from "@/components/bug-report-popup";
 
 /**
  * Client shell for the admin area: renders the gate state (checking /
@@ -159,6 +161,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* Recent automatic anti-spam actions (warnings / auto-timeouts) */}
       <ModerationPopup />
+      {/* Blocked posts the content filter caught, one popup per staff member */}
+      <FilterAlertPopup />
+      {/* New bug reports, one popup per staff member */}
+      <BugReportPopup />
     </>
   );
 }

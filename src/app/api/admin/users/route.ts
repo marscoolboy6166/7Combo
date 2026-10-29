@@ -62,7 +62,7 @@ export async function GET(request: Request) {
  *  - ban: scope = posting | rating | both; days omitted/null = permanent
  *  - unban: lifts the restriction; appeal: "upheld" marks the appeal upheld
  *  - deny_appeal: restriction stays, appeal closed forever
- *  - set_role: role = user | moderator | admin (self-change blocked in DB)
+ *  - grant_role: role = user | moderator | admin (owner only; self/owner guards in DB)
  *  - set_test: is_test = true | false (official test-account badge)
  * Guardrails (no self-ban, no admin-ban) are enforced in the DB functions.
  */
@@ -93,12 +93,15 @@ export async function POST(request: Request) {
   if (!UUID_RE.test(id)) return bad("Valid user id is required.");
   const action = typeof body.action === "string" ? body.action : "";
 
-  // ---------------- set role ----------------
-  // Only admins reach this route (requireAdmin gate), and the database
-  // function re-verifies + blocks changing your own role. Granting or
-  // removing 'owner' is impossible through the app by design — the role is
-  // assigned once, directly in the database, by the site owner.
-  if (action === "set_role") {
+  // ---------------- grant role (owner only) ----------------
+  // The caller's role comes from the session (gate.role), never from the
+  // request body. Admins can ban, review appeals, and flag test accounts,
+  // but role changes belong to the owner alone; the DB function re-checks
+  // with is_owner() as a second lock.
+  if (action === "grant_role") {
+    if (gate.role !== "owner") {
+      return bad("Only the site owner can change roles.", 403);
+    }
     const role = body.role;
     if (
       typeof role !== "string" ||
@@ -106,29 +109,47 @@ export async function POST(request: Request) {
     ) {
       return bad('role must be "user", "moderator", or "admin".');
     }
-    const { data: ok, error } = await supabase.rpc("admin_set_role", {
+    if (role === "owner") {
+      return bad('The owner role is assigned directly in the database and cannot be granted through the app.');
+    }
+
+    const callerId = gate.userId ?? "";
+    if (callerId && id.toLowerCase() === callerId.toLowerCase()) {
+      return bad("You cannot change your own role.");
+    }
+
+    // Single owner-only entry point: (p_target uuid, p_role text).
+    const { data: ok, error } = await supabase.rpc("owner_grant_role", {
       p_target: id,
       p_role: role,
     });
     if (error) {
       if (isMissingFunction(error)) return bad("Database migration missing.", 409);
+      // Guardrail messages raised by the DB function are user-facing.
+      if (error.code === "P0001") return bad(error.message, 400);
       return bad(error.message, 500);
     }
     if (!ok) return bad("User not found.", 404);
-    return NextResponse.json({ ok: true, action: "set_role", role });
+    return NextResponse.json({ ok: true, action: "grant_role", role });
   }
 
-  // ---------------- toggle official test-account flag ----------------
+  // ---------------- toggle official test-account flag (owner only) ----------------
+  // Accounts are owner property: only the owner decides which profiles are
+  // official test accounts. Admins keep bans, timeouts and appeals.
   if (action === "set_test") {
+    if (gate.role !== "owner") {
+      return bad("Only the site owner can change the test-account flag.", 403);
+    }
     if (typeof body.is_test !== "boolean") {
       return bad("is_test must be true or false.");
     }
-    const { data: ok, error } = await supabase.rpc("admin_set_test", {
+    const { data: ok, error } = await supabase.rpc("owner_set_test", {
       p_target: id,
       p_is_test: body.is_test,
     });
     if (error) {
       if (isMissingFunction(error)) return bad("Database migration missing.", 409);
+      if (error.code === "P0001") return bad(error.message, 400);
       return bad(error.message, 500);
     }
     if (!ok) return bad("User not found.", 404);
@@ -166,7 +187,7 @@ export async function POST(request: Request) {
 
   // ---------------- ban / timeout ----------------
   if (action !== "ban") {
-    return bad('action must be "ban", "unban", "deny_appeal", "set_role", or "set_test".');
+    return bad('action must be "ban", "unban", "deny_appeal", "grant_role", or "set_test".');
   }
 
   const scope = body.scope;

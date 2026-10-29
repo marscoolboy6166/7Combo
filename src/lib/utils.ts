@@ -18,3 +18,21 @@ export function slugify(title: string) {
     .replace(/^-+|-+$/g, "")
     .slice(0, 60) || "combo";
 }
+
+/** Privileges a staff member gets in their own profile popup once promoted. */
+export const ROLE_PRIVILEGES_BY_ROLE: Record<"moderator" | "admin", string> = {
+  moderator: "Create and edit your own combos and products, and manage your upload count.",
+  admin: "Moderation powers: ban or timeout any member, review appeals, and set test flags.",
+};
+
+/** Granular help text shown in confirm modals when granting roles. */
+export const ROLE_GRANULARITY: Record<"moderator" | "admin", { confirmLabel: string; help: string }> = {
+  moderator: {
+    confirmLabel: "Make moderator",
+    help: "Moderators can post and edit combos and products, and manage their upload count.",
+  },
+  admin: {
+    confirmLabel: "Make admin",
+    help: "Admins get all moderator powers plus banning/timeouts, appeals, and test flags.",
+  },
+};

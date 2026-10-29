@@ -1,14 +1,14 @@
-import Link from "next/link";
-import Image from "next/image";
-import { notFound } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 import ComboCard from "@/components/combo-card";
+import ComboDeleteBadge from "@/components/combo-delete-badge";
 import EmptyState from "@/components/empty-state";
 import MyBanStatus from "@/components/my-ban-status";
 import ProfileAdminActions from "@/components/profile-admin-actions";
-import ComboDeleteBadge from "@/components/combo-delete-badge";
-import { getProfileByUsername, getCombosByAuthor, getUserStats } from "@/lib/data";
-import { createClient } from "@/lib/supabase/server";
+import { getCombosByAuthor, getProfileByUsername, getUserStats } from "@/lib/data";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import Image from "next/image";
+import Link from "next/link";
+import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -38,8 +38,6 @@ export default async function ProfilePage({
   const combos = await getCombosByAuthor(profile.id);
   const stats = await getUserStats(profile.id);
 
-  // The author browsing their own profile gets delete badges
-  // on their combo cards.
   let viewerId: string | null = null;
   if (isSupabaseConfigured()) {
     const supabase = await createClient();
@@ -106,8 +104,8 @@ export default async function ProfilePage({
         </div>
       </section>
 
-      {/* Admin-only: quick ban/timeout right on the profile (never on
-          admin/owner profiles — they cannot be banned) */}
+      {/* Admin-only: quick ban/timeout + the grant-role buttons on the
+          public profile (never on the viewer's own profile or the owner's). */}
       <ProfileAdminActions userId={profile.id} targetRole={profile.role} />
 
       {/* If the VIEWER is banned, their notice + one-appeal form lives here. */}

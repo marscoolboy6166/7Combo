@@ -154,6 +154,16 @@ export async function POST(
     allowedPhrases: ((whitelistRows ?? []) as unknown as WhitelistRow[]).map((r) => r.phrase),
   });
   if (verdict.decision === "flag") {
+    // Record the block as a staff alert (unresolved). Best-effort: a missing
+    // migration must never turn a friendly rejection into a 500.
+    await supabase
+      .rpc("log_filter_event", {
+        p_kind: "comment",
+        p_reason: verdict.rule ?? "Filtered",
+        p_flagged: text,
+        p_context: { combo_id: id },
+      })
+      .then(() => undefined, () => undefined);
     return NextResponse.json(
       { message: verdict.reason, filterFlag: { flaggedText: text, rule: verdict.rule } },
       { status: 422 },

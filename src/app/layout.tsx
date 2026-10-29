@@ -3,8 +3,11 @@ import Header from "@/components/header";
 import AdminFab from "@/components/admin-fab";
 import BanWatcher from "@/components/ban-watcher";
 import SetupNotice from "@/components/setup-notice";
+import RoleChangeNotice from "@/components/role-change-notice";
 import { CityProvider } from "@/lib/city-context";
 import { getSelectedCity } from "@/lib/get-city";
+import { createClient } from "@/lib/supabase/server";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
 import Link from "next/link";
 import { APP_NAME, APP_TAGLINE, SITE_EMAIL } from "@/lib/constants";
 import "./globals.css";
@@ -42,6 +45,24 @@ export default async function RootLayout({
 }) {
   const city = await getSelectedCity();
 
+  // Popup for a staff role granted in the last 24h. The RPC only returns a
+  // row while the logged change still matches the current role, and the
+  // client keeps it one-time via localStorage.
+  let recentChange: { event_type: string; p_role: string; changed_at: string } | null = null;
+  if (isSupabaseConfigured()) {
+    const supabase = await createClient();
+    const { data: authUser } = await supabase.auth.getUser();
+    if (authUser.user) {
+      const { error, data } = await supabase.rpc("my_recent_role_changes");
+      const last = (data ?? [])[0] as
+        | { event_type: string; role: string; changed_at: string }
+        | undefined;
+      if (!error && last) {
+        recentChange = { event_type: last.event_type, p_role: last.role, changed_at: last.changed_at };
+      }
+    }
+  }
+
   return (
     <html lang="en">
       <body className="flex min-h-screen flex-col">
@@ -73,6 +94,7 @@ export default async function RootLayout({
               Made with 🇹🇭 in Chiang Mai
             </p>
           </footer>
+          <RoleChangeNotice recentChange={recentChange} />
         </CityProvider>
       </body>
     </html>

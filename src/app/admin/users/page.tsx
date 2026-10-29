@@ -269,31 +269,18 @@ export default function AdminUsersPage() {
                 </div>
 
                 <div className="flex shrink-0 flex-wrap items-center gap-2">
-                  {viewerId !== u.id && (
-                    <RoleControls
-                      user={u}
-                      onDone={load}
-                      onMessage={setMessage}
-                      onAsk={setPending}
-                    />
+                  {viewerId !== u.id && viewerRole === "owner" && (
+                    <RoleControls user={u} onDone={load} onMessage={setMessage} />
                   )}
                   {badge.label !== "Active" ? (
-                    <>
-                      {(u.role !== "admin" || viewerRole === "owner") && (
-                        <button
-                          onClick={() => askUnban(u)}
-                          className="rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700"
-                        >
-                          Lift restriction
-                        </button>
-                      )}
-                      <Link
-                        href={`/admin/users/${u.id}`}
-                        className="rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                    (u.role !== "admin" || viewerRole === "owner") && (
+                      <button
+                        onClick={() => askUnban(u)}
+                        className="rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700"
                       >
-                        Manage
-                      </Link>
-                    </>
+                        Lift restriction
+                      </button>
+                    )
                   ) : (
                     u.role !== "owner" &&
                     !(u.role === "admin" && viewerRole !== "owner") && (
@@ -304,16 +291,6 @@ export default function AdminUsersPage() {
                         Ban / Timeout
                       </Link>
                     )
-                  )}
-                  {(u.role === "owner" ||
-                    (u.role === "admin" && viewerRole !== "owner")) &&
-                    badge.label === "Active" && (
-                    <Link
-                      href={`/admin/users/${u.id}`}
-                      className="rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-                    >
-                      Manage
-                    </Link>
                   )}
                   {u.appeal_status === "pending" && (
                     <button
@@ -349,6 +326,13 @@ export default function AdminUsersPage() {
                       Deny appeal
                     </button>
                   )}
+                  {/* Always available: the full management page for this user. */}
+                  <Link
+                    href={`/admin/users/${u.id}`}
+                    className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                  >
+                    Manage
+                  </Link>
                 </div>
               </div>
             </div>
@@ -368,20 +352,17 @@ export default function AdminUsersPage() {
 }
 
 /**
- * Per-row role + test-flag controls. Admin-only (this page only loads for
- * admins); the database re-verifies and blocks changing your own role.
- * Confirmations go through the shared in-app modal via onAsk.
+ * Per-row owner controls: the test-account flag, or a note when the row is
+ * the owner itself. Only rendered for the owner (see the call site).
  */
 function RoleControls({
   user,
   onDone,
   onMessage,
-  onAsk,
 }: {
   user: AdminUser;
   onDone: () => Promise<void>;
   onMessage: (m: string) => void;
-  onAsk: (a: PendingConfirm) => void;
 }) {
   const [busy, setBusy] = useState(false);
 
@@ -405,60 +386,15 @@ function RoleControls({
     }
   }
 
-  function askRole(role: "user" | "moderator" | "admin") {
-    onAsk({
-      title: "Change this role?",
-      body:
-        role === "admin" ? (
-          <>
-            Give <strong>{user.display_name}</strong> full admin powers? Admins can ban users,
-            change roles, and manage everything.
-          </>
-        ) : (
-          <>
-            Set <strong>{user.display_name}</strong>&apos;s role to{" "}
-            <strong>{role}</strong>
-            {role === "moderator"
-              ? "? Moderators can manage products and combos but never users or bans."
-              : "?"}
-          </>
-        ),
-      confirmLabel: role === "admin" ? "Make admin" : `Set ${role}`,
-      danger: role === "admin",
-      onConfirm: () => post({ action: "set_role", role }, `${user.display_name} is now ${role}.`),
-    });
-  }
-
   return (
     <div className="flex items-center gap-2">
-      {user.role === "owner" ? (
+      {user.role === "owner" && (
         <span
           className="text-[11px] font-semibold text-amber-700"
           title="Assigned directly in the database — cannot be changed from the app"
         >
           assigned in DB
         </span>
-      ) : (
-        <label className="flex items-center gap-1.5 text-xs text-slate-500">
-          <span className="sr-only">Role</span>
-          <select
-            value={user.role}
-            disabled={busy}
-            onChange={(e) => {
-              const role = e.target.value as "user" | "moderator" | "admin";
-              if (role === user.role) return;
-              askRole(role);
-              // Revert the visual selection until the change is confirmed
-              // and the list reloads with fresh data.
-              e.target.value = user.role;
-            }}
-            className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 focus:border-emerald-500 focus:outline-none disabled:opacity-60"
-          >
-            <option value="user">User</option>
-            <option value="moderator">Moderator</option>
-            <option value="admin">Admin</option>
-          </select>
-        </label>
       )}
       <button
         disabled={busy}

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import ConfirmModal, { type PendingConfirm } from "@/components/confirm-modal";
+import GrantRoleButton from "@/components/grant-role-button";
 import { cn } from "@/lib/utils";
 
 interface AdminUser {
@@ -41,6 +42,11 @@ const DURATION_OPTIONS = [
 
 function isActive(u: AdminUser): boolean {
   return Boolean(u.ban_scope) && (!u.ban_until || new Date(u.ban_until).getTime() > Date.now());
+}
+
+/** Short handle shown in the profile “Grant role…” modal. */
+function profileHandle(u: AdminUser) {
+  return u.username ? `@${u.username}` : `@${u.id.slice(0, 8)}`;
 }
 
 export default function AdminUserDetailPage() {
@@ -178,6 +184,12 @@ export default function AdminUserDetailPage() {
   }
 
   const currentlyBanned = isActive(user);
+  // One place for the ban rule: never the owner, never an admin unless you are
+  // the owner, and never yourself. The DB enforces the same rule.
+  const canModerateTarget =
+    user.role !== "owner" &&
+    !(user.role === "admin" && viewerRole !== "owner") &&
+    viewerId !== user.id;
 
   return (
     <main>
@@ -253,84 +265,59 @@ export default function AdminUserDetailPage() {
       )}
 
       {/* Role + test-account management */}
-      <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="font-bold text-slate-900">Role &amp; account status</h3>
-        <p className="mt-1 text-xs text-slate-500">
-          Moderators can manage the catalog and combos but never users or bans. The test-account
-          flag is only a marker so you can tell which accounts you own — it grants no powers.
-        </p>
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          {user.role === "owner" || viewerId === user.id ? (
-            <span className="text-xs font-semibold text-amber-700">
-              {user.role === "owner"
-                ? "assigned in DB — cannot be changed from the app"
-                : "this is you — role changes are not possible on your own account"}
-            </span>
-          ) : (
-          <label className="flex items-center gap-2 text-sm text-slate-600">
-            Role
-            <select
-              value={user.role}
-              disabled={busy}
-              onChange={(e) => {
-                const role = e.target.value as "user" | "moderator" | "admin";
-                if (role === user.role) return;
-                e.target.value = user.role; // revert until confirmed + reloaded
-                setPending({
-                  title: "Change this role?",
-                  body:
-                    role === "admin" ? (
-                      <>
-                        Give <strong>{user.display_name}</strong> full admin powers? Admins can
-                        ban users, change roles, and manage everything.
-                      </>
-                    ) : (
-                      <>
-                        Set <strong>{user.display_name}</strong>&apos;s role to{" "}
-                        <strong>{role}</strong>
-                        {role === "moderator"
-                          ? "? Moderators can manage products and combos but never users or bans."
-                          : "?"}
-                      </>
-                    ),
-                  confirmLabel: role === "admin" ? "Make admin" : `Set ${role}`,
-                  danger: role === "admin",
-                  onConfirm: () =>
-                    act(
-                      { action: "set_role", role },
-                      `${user.display_name} is now ${role}.`,
-                    ),
-                });
-              }}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium focus:border-emerald-500 focus:outline-none disabled:opacity-60"
-            >
-              <option value="user">User</option>
-              <option value="moderator">Moderator</option>
-              <option value="admin">Admin</option>
-            </select>
-          </label>
-          )}
-          <button
-            disabled={busy}
-            onClick={() =>
-              void act(
-                { action: "set_test", is_test: !user.is_test },
-                user.is_test
-                  ? `${user.display_name} unmarked as test account.`
-                  : `${user.display_name} marked as an official test account.`,
-              )
-            }
-            className={cn(
-              "rounded-xl px-4 py-2 text-sm font-semibold transition disabled:opacity-60",
-              user.is_test
-                ? "border border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
-                : "border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100",
+      {viewerRole === "owner" && (
+        <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="font-bold text-slate-900">Role &amp; account status</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            The test-account flag is only a marker so you can tell which accounts you own — it
+            grants no powers.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            {user.role === "owner" || viewerId === user.id ? (
+              <span className="text-xs font-semibold text-amber-700">
+                {user.role === "owner"
+                  ? "owner role — assigned in DB, cannot be changed from the app"
+                  : "this is you — your own role cannot be changed from the app"}
+              </span>
+            ) : (
+              <GrantRoleButton
+                userId={user.id}
+                targetDisplayName={profileHandle(user)}
+                targetRole={user.role}
+                onDone={async () => {
+                  await load();
+                }}
+                onMessage={(m: string) => setMessage(m)}
+              />
             )}
-          >
-            {user.is_test ? "Unmark test account" : "Mark as official test account"}
-          </button>
-        </div>
-      </section>
+
+            <button
+              disabled={busy}
+              onClick={() =>
+                void act(
+                  { action: "set_test", is_test: !user.is_test },
+                  user.is_test
+                    ? `${user.display_name} unmarked as test account.`
+                    : `${user.display_name} marked as an official test account.`,
+                )
+              }
+              className={cn(
+                "rounded-xl px-4 py-2 text-sm font-semibold transition disabled:opacity-60",
+                user.is_test
+                  ? "border border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                  : "border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100",
+              )}
+            >
+              {user.is_test ? "Unmark test account" : "Mark as official test account"}
+            </button>
+          </div>
+
+          <p className="mt-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+            You can grant moderator or admin, and demote back to member. The database enforces the
+            same rules.
+          </p>
+        </section>
+      )}
 
       {/* Appeal review */}
       {user.appeal_status === "pending" && user.appeal_text && (
@@ -379,7 +366,7 @@ export default function AdminUserDetailPage() {
       {/* Ban / timeout form — the dedicated controls. Hidden whenever the
           viewer lacks permission: owner target (nobody can ban them), own
           row (self-ban), or admin target viewed by a non-owner admin. */}
-      {user.role === "owner" || (user.role === "admin" && viewerRole !== "owner") ? (
+      {!canModerateTarget ? (
         <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h3 className="font-bold text-slate-900">Not bannable</h3>
           <p className="mt-1 text-sm text-slate-500">
@@ -391,9 +378,6 @@ export default function AdminUserDetailPage() {
           </p>
         </section>
       ) : (
-      <></>
-      )}
-      {user.role !== "owner" && !(user.role === "admin" && viewerRole !== "owner") && (
       <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h3 className="font-bold text-slate-900">
           {currentlyBanned ? "Change or replace restriction" : "Ban or timeout"}

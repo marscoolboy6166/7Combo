@@ -2,11 +2,20 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin-auth";
 
 /**
- * GET /api/admin/moderation
- * Recent automatic anti-spam actions (warnings + auto-timeouts) from the
- * moderation_events log. Feeds the admin-layout popup and the Overview
- * "Auto-mod" card. Admin-only — the database function re-verifies staff.
+ * GET  /api/admin/moderation — recent automatic anti-spam actions
+ * POST /api/admin/moderation — mark alerts as seen, or resolve one
+ *
+ * Each event carries its own resolution state plus `acknowledged`, which is
+ * per-admin: every admin sees an alert once, and acknowledging yours never
+ * affects anyone else. Resolved events never open the popup again.
  */
+
+function isMissingFunction(error: { code?: string; message?: string } | null): boolean {
+  return error?.code === "42883" || /function .* does not exist/i.test(error?.message ?? "");
+}
+
+const MIGRATION_HINT = "Anti-spam migration missing — run supabase/anti-spam.sql.";
+
 export async function GET() {
   const gate = await requireAdmin();
   if (gate.error || !gate.supabase) {
@@ -18,17 +27,85 @@ export async function GET() {
 
   const { data, error } = await gate.supabase.rpc("admin_recent_moderation");
   if (error) {
-    if (
-      error.code === "42883" ||
-      /function .* does not exist/i.test(error.message ?? "")
-    ) {
-      return NextResponse.json(
-        { message: "Anti-spam migration missing — run supabase/anti-spam.sql.", events: [] },
-        { status: 409 },
-      );
+    if (isMissingFunction(error)) {
+      return NextResponse.json({ message: MIGRATION_HINT, events: [] }, { status: 409 });
     }
     return NextResponse.json({ message: error.message }, { status: 500 });
   }
 
   return NextResponse.json({ events: data ?? [] });
+}
+
+export async function POST(request: Request) {
+  const gate = await requireAdmin();
+  if (gate.error || !gate.supabase) {
+    return NextResponse.json(
+      { message: gate.error ?? "Unauthorized" },
+      { status: gate.status },
+    );
+  }
+
+  let body: { action?: unknown; ids?: unknown; id?: unknown; resolution?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ message: "Invalid request body." }, { status: 400 });
+  }
+
+  // ---------------- mark as seen (per admin) ----------------
+  if (body.action === "ack") {
+    const ids = Array.isArray(body.ids)
+      ? body.ids.filter((n): n is number => typeof n === "number" && Number.isInteger(n))
+      : [];
+    if (ids.length === 0 || ids.length > 200) {
+      return NextResponse.json({ message: "ids must be 1–200 event ids." }, { status: 400 });
+    }
+
+    const { data, error } = await gate.supabase.rpc("admin_ack_moderation_event", { p_ids: ids });
+    if (error) {
+      if (isMissingFunction(error)) {
+        return NextResponse.json({ message: MIGRATION_HINT }, { status: 409 });
+      }
+      return NextResponse.json({ message: error.message }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true, action: "ack", marked: data ?? 0 });
+  }
+
+  // ---------------- resolve ----------------
+  if (body.action === "resolve") {
+    const id = body.id;
+    const resolution = body.resolution;
+    if (typeof id !== "number" || !Number.isInteger(id)) {
+      return NextResponse.json({ message: "id must be an event id." }, { status: 400 });
+    }
+    if (resolution !== "confirmed" && resolution !== "false_positive") {
+      return NextResponse.json(
+        { message: 'resolution must be "confirmed" or "false_positive".' },
+        { status: 400 },
+      );
+    }
+
+    const { data: ok, error } = await gate.supabase.rpc("admin_resolve_moderation_event", {
+      p_id: id,
+      p_resolution: resolution,
+    });
+    if (error) {
+      if (isMissingFunction(error)) {
+        return NextResponse.json({ message: MIGRATION_HINT }, { status: 409 });
+      }
+      if (error.code === "P0001") {
+        return NextResponse.json({ message: error.message }, { status: 400 });
+      }
+      return NextResponse.json({ message: error.message }, { status: 500 });
+    }
+    if (!ok) {
+      return NextResponse.json({ message: "That alert was already resolved." }, { status: 409 });
+    }
+    return NextResponse.json({ ok: true, action: "resolve", resolution });
+  }
+
+  return NextResponse.json(
+    { message: 'action must be "ack" or "resolve".' },
+    { status: 400 },
+  );
 }

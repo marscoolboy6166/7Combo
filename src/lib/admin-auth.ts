@@ -29,8 +29,12 @@ async function currentRole(
  *  2. Request must carry a valid signed-in session (401)
  *  3. The session's profile must satisfy the role requirement (403)
  *
- * requireAdmin: full admin powers (users, roles, bans).
+ * requireAdmin: full admin powers (users, bans, appeals, test flags).
  * requireStaff: admin OR moderator — catalog + combo moderation.
+ *
+ * Role changes are not a gate of their own: the admin users route checks
+ * `role === "owner"` before granting, and the DB function re-checks
+ * is_owner().
  *
  * Every admin API route must call one of these before touching data. The
  * same rules are also enforced by RLS/database functions — this gate exists
@@ -57,11 +61,9 @@ async function requireRole(minimum: "staff" | "admin"): Promise<StaffGate> {
   const role = await currentRole(supabase);
   // 'owner' passes both gates: it outranks admin and inherits staff powers.
   const allowed =
-    role === "admin" ||
-    role === "owner" ||
-    (minimum === "staff" && role === "moderator");
+    role === "admin" || role === "owner" || (minimum === "staff" && role === "moderator");
 
-  if (!allowed) {
+  if (!allowed || !role) {
     return {
       supabase: null,
       userId: null,
@@ -83,3 +85,4 @@ export function requireAdmin(): Promise<StaffGate> {
 export function requireStaff(): Promise<StaffGate> {
   return requireRole("staff");
 }
+
